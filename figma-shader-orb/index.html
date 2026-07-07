@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb Shader — interactive</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #ffffff; }
+  body { display: grid; place-items: center; }
+  canvas { width: min(90vmin, 800px); height: min(90vmin, 800px); display: block; cursor: crosshair; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script id="frag" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+
+uniform vec2  uRes;      // canvas resolution (px)
+uniform float uTime;     // seconds
+uniform vec2  uMouse;    // eased mouse in circle space (unit coords), (99,99) = away
+out vec4 outColor;
+
+// ---------- palette ----------
+const vec3 C1 = vec3(0.976, 0.722, 0.373);  // #f9b85f
+const vec3 C2 = vec3(0.851, 0.800, 0.690);  // #d9ccb0
+const vec3 C3 = vec3(0.714, 0.851, 1.000);  // #B6D9FF
+const vec3 C4 = vec3(1.0);                  // white
+const vec3 BLUE = vec3(0.165, 0.0, 1.0);    // #2A00FF
+
+const float CIRCLE_R = 0.90;   // circle radius in unit space
+const int   N        = 250;    // spike count
+
+float hash(float n) { return fract(sin(n) * 43758.5453123); }
+
+// distance to segment ab, also returns normalized position t along it
+float sdSegment(vec2 p, vec2 a, vec2 b, out float t) {
+  vec2 pa = p - a, ba = b - a;
+  t = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * t);
+}
+
+void main() {
+  vec2 frag = gl_FragCoord.xy;
+  float scale = 0.5 * min(uRes.x, uRes.y);
+  vec2 p = (frag - 0.5 * uRes) / scale;          // unit space, y up
+  float px = 1.0 / scale;                        // one pixel in unit space
+
+  // ---------- 4-level radial gradient ----------
+  float r = length(p) / CIRCLE_R;                // 0 at center, 1 at circle edge
+  vec3 col = C1;                                                  // ring 1: 0–25%
+  col = mix(col, C2, smoothstep(0.20, 0.29, r));                  // ring 2: 25–35%
+  col = mix(col, C3, smoothstep(0.34, 0.44, r));                  // ring 3: 35–55%
+  col = mix(col, C4, smoothstep(0.50, 0.66, r));                  // ring 4: white
+  // outside the circle everything is already white (C4 == background)
+
+  // ---------- slow idle tumble (sphere rotation) ----------
+  float a1 = uTime * 0.10, a2 = uTime * 0.07;
+  mat3 rotY = mat3(cos(a1), 0.0, sin(a1),  0.0, 1.0, 0.0,  -sin(a1), 0.0, cos(a1));
+  mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, cos(a2), -sin(a2),  0.0, sin(a2), cos(a2));
+  mat3 rot = rotY * rotX;
+
+  float mouseNear = length(uMouse) < 5.0 ? 1.0 : 0.0;
+
+  // ---------- 250 spikes ----------
+  float acc = 0.0;
+  const float GA = 2.39996322973;                // golden angle
+  for (int i = 0; i < N; i++) {
+    float fi = float(i);
+    float h1 = hash(fi * 12.9898);
+    float h2 = hash(fi * 78.2330);
+    float h3 = hash(fi * 39.4260);
+
+    // fibonacci sphere direction + jitter -> even 3D distribution
+    float z = 1.0 - 2.0 * (fi + 0.5) / float(N);
+    z = clamp(z + (h1 - 0.5) * 0.15, -0.995, 0.995);
+    float th = fi * GA + h2 * 0.6;
+    float s = sqrt(1.0 - z * z);
+    vec3 v = rot * vec3(s * cos(th), s * sin(th), z);
+
+    // project: spikes pointing at the viewer foreshorten -> sphere illusion
+    float proj = max(length(v.xy), 1e-4);
+    vec2 dir = v.xy / proj;
+    float len3 = mix(0.16, 0.42, h3);            // true 3D length (varied)
+    float rho = len3 * proj;                     // projected outer radius
+    float lenN = clamp((rho - 0.03) / 0.39, 0.0, 1.0); // 0..1 apparent size
+
+    float ang = atan(dir.y, dir.x);
+
+    // idle floating wobble, per-spike phase
+    ang += sin(uTime * 0.5 + fi * 1.7) * 0.025;
+
+    // mouse avoidance: steer angle away + compress radially
+    if (mouseNear > 0.5) {
+      vec2 e0 = dir * rho;
+      vec2 dm = e0 - uMouse;
+      float md = length(dm);
+      float force = exp(-md * md * 22.0);
+      float mAng = atan(uMouse.y, uMouse.x);
+      float dAng = ang - mAng;
+      dAng = atan(sin(dAng), cos(dAng));         // wrap to [-pi, pi]
+      float side = dAng >= 0.0 ? 1.0 : -1.0;
+      ang += side * force * 0.85;                // steer around the cursor
+      rho *= 1.0 - force * 0.35;                 // shy away radially
+    }
+
+    vec2 d2 = vec2(cos(ang), sin(ang));
+    float rin = 0.015 + 0.05 * h1;               // start near the center
+    vec2 A = d2 * rin;
+    vec2 E = d2 * max(rho, rin + 0.02);
+
+    // tapered line: 0.1–0.5 "pt" at the tip, near-zero at the center
+    float t;
+    float d = sdSegment(p, A, E, t);
+    float wTip = mix(0.1, 0.5, lenN) * px;       // px-true widths
+    float w = mix(wTip * 0.10, wTip, t);
+    float lineA = smoothstep(w + px, max(w - px, 0.0), d)
+                * mix(0.10, 1.0, smoothstep(0.0, 0.6, t)); // fade into center
+    acc = max(acc, lineA);
+
+    // end node, sized with the line
+    float nr = mix(0.7, 2.6, lenN) * px;
+    float nd = length(p - E) - nr;
+    acc = max(acc, smoothstep(px, -px, nd));
+  }
+
+  col = mix(col, BLUE, acc);
+  outColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias: false });
+
+const vsSrc = `#version 300 es
+void main() {
+  vec2 v = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  gl_Position = vec4(v * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+function compile(type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById('frag').textContent));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+  throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const uRes = gl.getUniformLocation(prog, 'uRes');
+const uTime = gl.getUniformLocation(prog, 'uTime');
+const uMouse = gl.getUniformLocation(prog, 'uMouse');
+
+// mouse easing: the shader chases a lazy phantom cursor -> smooth "steering"
+let target = [99, 99];      // (99,99) = far away / idle
+let eased = [99, 99];
+
+function toUnit(ev) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (ev.clientX - rect.left) / rect.width;
+  const y = (ev.clientY - rect.top) / rect.height;
+  const scale = 0.5;                     // unit space: min(w,h)/2
+  return [(x - 0.5) / scale, (0.5 - y) / scale];
+}
+canvas.addEventListener('pointermove', ev => { target = toUnit(ev); });
+canvas.addEventListener('pointerleave', () => { target = [99, 99]; });
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const size = Math.round(canvas.clientWidth * dpr);
+  if (canvas.width !== size) { canvas.width = size; canvas.height = size; }
+}
+
+const t0 = performance.now();
+function frame() {
+  resize();
+  gl.viewport(0, 0, canvas.width, canvas.height);
+
+  // ease toward target; snap when returning to idle so no fly-across
+  const k = (target[0] > 50) ? 0.02 : 0.08;
+  eased[0] += (target[0] - eased[0]) * k;
+  eased[1] += (target[1] - eased[1]) * k;
+
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, (performance.now() - t0) / 1000);
+  gl.uniform2f(uMouse, eased[0], eased[1]);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+
+// capture mode: ?t=3.2&mx=0.25&my=0.1 renders one frozen frame
+// (fixed time, mouse fully eased) for screenshots — no effect otherwise
+const params = new URLSearchParams(location.search);
+if (params.has('t')) {
+  const ft = parseFloat(params.get('t')) || 0;
+  const fm = [parseFloat(params.get('mx') ?? '99'), parseFloat(params.get('my') ?? '99')];
+  const draw = () => {
+    resize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uTime, ft);
+    gl.uniform2f(uMouse, fm[0], fm[1]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+  draw();
+  requestAnimationFrame(draw);   // once more after layout settles
+} else {
+  frame();
+}
+</script>
+</body>
+</html>

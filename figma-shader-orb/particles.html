@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb — particle system version</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #ffffff; }
+  body { display: grid; place-items: center; }
+  canvas { width: min(90vmin, 800px); height: min(90vmin, 800px); display: block; cursor: crosshair; }
+  #hud { position: fixed; top: 10px; left: 12px; font: 12px/1.4 monospace; color: #999; user-select: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+
+<!-- pass 1: gradient rings only — no loop, trivially cheap -->
+<script id="fragRings" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform vec2 uRes;
+out vec4 o;
+const vec3 C1 = vec3(0.976, 0.722, 0.373);
+const vec3 C2 = vec3(0.851, 0.800, 0.690);
+const vec3 C3 = vec3(0.714, 0.851, 1.000);
+const vec3 C4 = vec3(1.0);
+void main() {
+  vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / (0.5 * min(uRes.x, uRes.y));
+  float r = length(p) / 0.90;
+  vec3 col = C1;
+  col = mix(col, C2, smoothstep(0.20, 0.29, r));
+  col = mix(col, C3, smoothstep(0.34, 0.44, r));
+  col = mix(col, C4, smoothstep(0.50, 0.66, r));
+  o = vec4(col, 1.0);
+}
+</script>
+
+<!-- pass 2: instanced tapered spikes; only touches pixels each spike covers -->
+<script id="vertSpike" type="x-shader/x-vertex">#version 300 es
+layout(location=0) in vec2 corner;      // x: 0..1 along spike, y: -1..1 across
+layout(location=1) in vec4 iSeg;        // ax, ay, ex, ey  (unit space)
+layout(location=2) in vec2 iMeta;       // wTip(px), lenN
+uniform vec2 uRes;
+out float vT;
+out float vAcross;
+out float vHalfPx;
+void main() {
+  vec2 a = iSeg.xy, e = iSeg.zw;
+  vec2 ba = e - a;
+  vec2 dir = normalize(ba);
+  vec2 perp = vec2(-dir.y, dir.x);
+  float scale = 0.5 * min(uRes.x, uRes.y);         // px per unit
+  float wPx = mix(iMeta.x * 0.10, iMeta.x, corner.x);
+  float halfU = (wPx * 0.5 + 1.0) / scale;         // +1px AA margin
+  vec2 p = mix(a, e, corner.x) + perp * halfU * corner.y;
+  gl_Position = vec4(p * scale / (0.5 * uRes), 0.0, 1.0);
+  vT = corner.x;
+  vAcross = corner.y * (wPx * 0.5 + 1.0);          // px offset from spine
+  vHalfPx = wPx * 0.5;
+}
+</script>
+<script id="fragSpike" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+in float vT; in float vAcross; in float vHalfPx;
+out vec4 o;
+void main() {
+  float edge = smoothstep(vHalfPx + 0.7, max(vHalfPx - 0.7, 0.0), abs(vAcross));
+  float fade = mix(0.10, 1.0, smoothstep(0.0, 0.6, vT));   // vanish toward center
+  o = vec4(0.165, 0.0, 1.0, edge * fade);
+}
+</script>
+
+<!-- pass 3: instanced end nodes -->
+<script id="vertDot" type="x-shader/x-vertex">#version 300 es
+layout(location=0) in vec2 corner;      // -1..1 quad
+layout(location=1) in vec3 iDot;        // ex, ey (unit), radius(px)
+uniform vec2 uRes;
+out vec2 vLocal; out float vRad;
+void main() {
+  float scale = 0.5 * min(uRes.x, uRes.y);
+  float rU = (iDot.z + 1.0) / scale;
+  vec2 p = iDot.xy + corner * rU;
+  gl_Position = vec4(p * scale / (0.5 * uRes), 0.0, 1.0);
+  vLocal = corner * (iDot.z + 1.0);
+  vRad = iDot.z;
+}
+</script>
+<script id="fragDot" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+in vec2 vLocal; in float vRad;
+out vec4 o;
+void main() {
+  float a = smoothstep(vRad + 0.7, vRad - 0.7, length(vLocal));
+  o = vec4(0.165, 0.0, 1.0, a);
+}
+</script>
+
+<script>
+'use strict';
+const canvas = document.getElementById('c');
+const hud = document.getElementById('hud');
+const gl = canvas.getContext('webgl2', {
+  antialias: false, desynchronized: true, powerPreference: 'high-performance',
+});
+
+const fsTriVs = `#version 300 es
+void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
+
+function program(vs, fs) {
+  const c = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+  const p = gl.createProgram();
+  gl.attachShader(p, c(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, c(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+const src = id => document.getElementById(id).textContent;
+const progRings = program(fsTriVs, src('fragRings'));
+const progSpike = program(src('vertSpike'), src('fragSpike'));
+const progDot   = program(src('vertDot'),  src('fragDot'));
+const uResRings = gl.getUniformLocation(progRings, 'uRes');
+const uResSpike = gl.getUniformLocation(progSpike, 'uRes');
+const uResDot   = gl.getUniformLocation(progDot,   'uRes');
+
+// ---------- particle state (the CPU side of the system) ----------
+const N = 250, GA = 2.39996322973;
+const hash = n => { const x = Math.sin(n) * 43758.5453123; return x - Math.floor(x); };
+const mixv = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
+
+const P = [];                      // static per-particle definition
+for (let i = 0; i < N; i++) {
+  const h1 = hash(i * 12.9898), h2 = hash(i * 78.2330), h3 = hash(i * 39.4260);
+  let z = 1.0 - 2.0 * (i + 0.5) / N;
+  z = clamp(z + (h1 - 0.5) * 0.15, -0.995, 0.995);
+  const th = i * GA + h2 * 0.6;
+  const s = Math.sqrt(1 - z * z);
+  P.push({
+    base: [s * Math.cos(th), s * Math.sin(th), z],   // direction on the sphere
+    len3: mixv(0.16, 0.42, h3),
+    rin: 0.015 + 0.05 * h1,
+    phase: i * 1.7,
+    defl: 0, deflV: 0,             // spring state: angular deflection
+    squish: 0, squishV: 0,         // spring state: radial compression
+  });
+}
+
+// quad templates
+const spikeCorners = new Float32Array([0,-1, 1,-1, 0,1, 1,1]);
+const dotCorners   = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+const segData  = new Float32Array(N * 4);
+const metaData = new Float32Array(N * 2);
+const dotData  = new Float32Array(N * 3);
+
+function makeVao(cornerBuf, corners, instances) {
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, corners, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  for (const inst of instances) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, inst.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, inst.data.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(inst.loc);
+    gl.vertexAttribPointer(inst.loc, inst.size, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(inst.loc, 1);
+  }
+  gl.bindVertexArray(null);
+  return vao;
+}
+const segBuf = gl.createBuffer(), metaBuf = gl.createBuffer(), dotBuf = gl.createBuffer();
+const vaoSpike = makeVao(gl.createBuffer(), spikeCorners,
+  [{ buf: segBuf, data: segData, loc: 1, size: 4 }, { buf: metaBuf, data: metaData, loc: 2, size: 2 }]);
+const vaoDot = makeVao(gl.createBuffer(), dotCorners,
+  [{ buf: dotBuf, data: dotData, loc: 1, size: 3 }]);
+
+// ---------- input ----------
+let mouse = [99, 99];              // raw target; springs do the smoothing
+function toUnit(ev) {
+  const rect = canvas.getBoundingClientRect();
+  return [((ev.clientX - rect.left) / rect.width - 0.5) / 0.5,
+          (0.5 - (ev.clientY - rect.top) / rect.height) / 0.5];
+}
+canvas.addEventListener('pointermove', ev => { mouse = toUnit(ev); });
+canvas.addEventListener('pointerleave', () => { mouse = [99, 99]; });
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const size = Math.round(canvas.clientWidth * dpr);
+  if (canvas.width !== size) { canvas.width = size; canvas.height = size; }
+}
+
+// ---------- simulation: 250 particles, springs, ~0.05 ms of CPU ----------
+function simulate(t, dt) {
+  const a1 = t * 0.10, a2 = t * 0.07;
+  const cy = Math.cos(a1), sy = Math.sin(a1), cx = Math.cos(a2), sx = Math.sin(a2);
+  const dprScale = canvas.width / canvas.clientWidth;   // px are device px
+  const mouseNear = Math.hypot(mouse[0], mouse[1]) < 5;
+
+  for (let i = 0; i < N; i++) {
+    const pt = P[i];
+    const [bx, by, bz] = pt.base;
+    // tumble: rotY(a1) * rotX(a2)
+    const y1 = by * cx - bz * sx, z1 = by * sx + bz * cx;
+    const x2 = bx * cy + z1 * sy, z2 = -bx * sy + z1 * cy;
+    const proj = Math.max(Math.hypot(x2, y1), 1e-4);
+    let rho = pt.len3 * proj;
+    const lenN = clamp((rho - 0.03) / 0.39, 0, 1);
+    let ang = Math.atan2(y1, x2) + Math.sin(t * 0.5 + pt.phase) * 0.025;
+
+    // spring toward the deflection the SDF version computes directly
+    let targetDefl = 0, targetSquish = 0;
+    if (mouseNear) {
+      const ex = Math.cos(ang) * rho, ey = Math.sin(ang) * rho;
+      const dx = ex - mouse[0], dy = ey - mouse[1];
+      const force = Math.exp(-(dx * dx + dy * dy) * 22.0);
+      const mAng = Math.atan2(mouse[1], mouse[0]);
+      let dAng = ang - mAng;
+      dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
+      targetDefl = (dAng >= 0 ? 1 : -1) * force * 0.85;
+      targetSquish = force * 0.35;
+    }
+    // slightly underdamped springs -> tiny overshoot, feels alive
+    const ST = 90, DA = 14;
+    pt.deflV += (targetDefl - pt.defl) * ST * dt;  pt.deflV *= Math.exp(-DA * dt);
+    pt.defl += pt.deflV * dt;
+    pt.squishV += (targetSquish - pt.squish) * ST * dt;  pt.squishV *= Math.exp(-DA * dt);
+    pt.squish += pt.squishV * dt;
+
+    ang += pt.defl;
+    rho *= 1 - clamp(pt.squish, -0.5, 0.9);
+
+    const dxu = Math.cos(ang), dyu = Math.sin(ang);
+    const rout = Math.max(rho, pt.rin + 0.02);
+    segData[i * 4]     = dxu * pt.rin;
+    segData[i * 4 + 1] = dyu * pt.rin;
+    segData[i * 4 + 2] = dxu * rout;
+    segData[i * 4 + 3] = dyu * rout;
+    metaData[i * 2]     = mixv(0.1, 0.5, lenN) * dprScale;
+    metaData[i * 2 + 1] = lenN;
+    dotData[i * 3]     = dxu * rout;
+    dotData[i * 3 + 1] = dyu * rout;
+    dotData[i * 3 + 2] = mixv(0.7, 2.6, lenN) * dprScale;
+  }
+}
+
+function draw() {
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.disable(gl.BLEND);
+  gl.useProgram(progRings);
+  gl.uniform2f(uResRings, canvas.width, canvas.height);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  gl.useProgram(progSpike);
+  gl.uniform2f(uResSpike, canvas.width, canvas.height);
+  gl.bindVertexArray(vaoSpike);
+  gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData);
+  gl.bindBuffer(gl.ARRAY_BUFFER, metaBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, metaData);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, N);
+
+  gl.useProgram(progDot);
+  gl.uniform2f(uResDot, canvas.width, canvas.height);
+  gl.bindVertexArray(vaoDot);
+  gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, N);
+  gl.bindVertexArray(null);
+}
+
+// ---------- main loop with FPS meter ----------
+const t0 = performance.now();
+let last = t0, ema = 16.7;
+let running = true;
+document.addEventListener('visibilitychange', () => {
+  running = !document.hidden;
+  if (running) { last = performance.now(); requestAnimationFrame(frame); }
+});
+
+function frame(now) {
+  if (!running) return;
+  resize();
+  const t = (now - t0) / 1000;
+  const dt = clamp((now - last) / 1000, 0.001, 0.05);
+  last = now;
+  simulate(t, dt);
+  draw();
+  ema = ema * 0.95 + (dt * 1000) * 0.05;
+  hud.textContent = `particles · ${(1000 / ema).toFixed(0)} fps · ${ema.toFixed(2)} ms`;
+  requestAnimationFrame(frame);
+}
+
+// capture/bench modes (mirror index.html)
+const params = new URLSearchParams(location.search);
+if (params.has('t')) {
+  const ft = parseFloat(params.get('t')) || 0;
+  mouse = [parseFloat(params.get('mx') ?? '99'), parseFloat(params.get('my') ?? '99')];
+  const draw1 = () => { resize(); simulate(ft, 1 / 60); draw(); };
+  // settle springs so hover captures show the deflected state
+  for (let k = 0; k < 120; k++) simulate(ft, 1 / 60);
+  draw1();
+  requestAnimationFrame(draw1);
+} else if (params.has('bench')) {
+  const bs = parseInt(params.get('bench')) || 1600;   // match SDF harness resolution
+  canvas.width = bs; canvas.height = bs;
+  const px = new Uint8Array(4);
+  const bench = (name, fn, n) => {
+    for (let i = 0; i < 5; i++) fn(i);
+    const b0 = performance.now();
+    for (let i = 0; i < n; i++) fn(i);
+    return `${name}: ${((performance.now() - b0) / n).toFixed(3)} ms`;
+  };
+  const lines = [];
+  lines.push(bench('simulate (CPU)', i => simulate(1 + i * 0.016, 1 / 60), 200));
+  lines.push(bench('full frame (GPU synced)', i => {
+    simulate(1 + i * 0.016, 1 / 60); draw();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  }, 60));
+  lines.push(`size: ${canvas.width}x${canvas.height}`);
+  hud.style.color = '#000';
+  hud.textContent = lines.join(' | ');
+  document.title = lines.join(' | ');
+} else {
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
