@@ -624,8 +624,8 @@ function createEffect(canvas, C) {
   precision highp float;
   uniform vec2 uRes, uCursor;             // cursor in unit coords
   uniform float uOn, uImgOn, uImgAspect, uFocus;
-  uniform float uBlocks, uSpotR, uCoreFrac, uBlurMax, uSoft;
-  uniform float uSeed, uBlinkDen, uBlinkBand, uSpotMult, uJitter;
+  uniform float uUnits, uMix, uMaxPx, uMinPx, uSpotR, uCoreFrac, uBlurMax, uSoft;
+  uniform float uSeed, uBlinkDen, uBlinkBand, uSpotPx, uJitter;
   uniform sampler2D uImg;
   uniform vec3 uBg;
   out vec4 o;
@@ -645,42 +645,48 @@ function createEffect(canvas, C) {
     }
     return uv;
   }
-  vec3 sampleBlocks(vec2 uv, float blocks) {
-    vec2 q = (floor(uv * blocks) + 0.5) / blocks;
-    return textureLod(uImg, coverUV(vec2(q.x, 1.0 - q.y)), 0.0).rgb;
-  }
   void main() {
     vec2 uv = gl_FragCoord.xy / uRes;
     vec3 col = uBg;
     if (uImgOn > 0.5) {
-      col = sampleBlocks(uv, uBlocks);    // base: coarse mosaic
-      vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / (0.5 * min(uRes.x, uRes.y));
-      float d = distance(p, uCursor);
+      // quadtree mosaic: pixel sizes halve from uMaxPx down to uMinPx
+      // (each step 4x the area). uMix is the chance a block subdivides.
+      vec2 posU = uv * uUnits;
+      float size = uMaxPx;
+      for (int i = 0; i < 4; i++) {
+        float nextSize = size * 0.5;
+        if (nextSize < uMinPx) break;
+        if (hashS(floor(posU / size) + float(i) * 11.7) >= uMix) break;
+        size = nextSize;
+      }
+      vec2 blockId = floor(posU / size);
+      vec2 q = (blockId + 0.5) * size / uUnits;
+      col = textureLod(uImg, coverUV(vec2(q.x, 1.0 - q.y)), 0.0).rgb;
+
       if (uOn > 0.5) {
-        // the spotlight boundary is evaluated per mosaic block with a hashed
-        // offset, so the edge staircases raggedly instead of drawing a circle
-        vec2 block = floor(uv * uBlocks);
-        vec2 bp = ((block + 0.5) / uBlocks) * 2.0 - 1.0;
+        // ragged boundary, evaluated per variable-size block. ALL interior
+        // gradients also follow this block-quantized jittered parameter, so
+        // no smooth circular contour survives anywhere in the spotlight.
+        vec2 bp = q * 2.0 - 1.0;
         float db = distance(bp, uCursor);
-        float tb = db / uSpotR + (hashS(block + 7.7) - 0.5) * uJitter;
+        float tb = db / uSpotR + (hashS(blockId + size * 7.7) - 0.5) * uJitter;
         if (tb < 1.0) {
-          float t = min(d / uSpotR, 1.0); // smooth param for the interior gradients
           // blur deepens toward the rim; LOD 0 = untouched image
-          float lod = uBlurMax * smoothstep(uCoreFrac, 1.0, t);
-          // uniform pixel size throughout the spotlight interior
-          vec2 q = (floor(uv * uBlocks * uSpotMult) + 0.5) / (uBlocks * uSpotMult);
-          vec3 pixeled = textureLod(uImg, coverUV(vec2(q.x, 1.0 - q.y)), lod).rgb;
+          float lod = uBlurMax * smoothstep(uCoreFrac, 1.0, tb);
+          // uniform pixel size (in units) throughout the spotlight interior
+          vec2 sq = (floor(posU / uSpotPx) + 0.5) * uSpotPx / uUnits;
+          vec3 pixeled = textureLod(uImg, coverUV(vec2(sq.x, 1.0 - sq.y)), lod).rgb;
           vec3 clear = textureLod(uImg, coverUV(vec2(uv.x, 1.0 - uv.y)), 0.0).rgb;
-          vec3 spot = mix(clear, pixeled, smoothstep(uCoreFrac * 0.5, uCoreFrac, t));
+          vec3 spot = mix(clear, pixeled, smoothstep(uCoreFrac * 0.5, uCoreFrac, tb));
           float rim = smoothstep(1.0, 1.0 - uSoft, tb);
           col = mix(col, spot, rim);
         } else {
-          // blinking mosaic blocks around the spotlight: each winks at a
+          // blinking blocks around the spotlight: each winks at a
           // random 20-50% fade, uniform in the band (no halo ring shape)
           float bandT = (tb - 1.0) * uSpotR / max(uBlinkBand, 1e-3);
           if (bandT < 1.0) {
-            float gate = step(hash(block), uBlinkDen);
-            col = mix(col, uBg, gate * mix(0.2, 0.5, hash(block + 57.31)));
+            float gate = step(hash(blockId + size), uBlinkDen);
+            col = mix(col, uBg, gate * mix(0.2, 0.5, hash(blockId + size + 57.31)));
           }
         }
       }
@@ -744,7 +750,11 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgOn'), C.imageOn && imgTex ? 1 : 0);
       gl.uniform1f(U('uImgAspect'), imgAspect);
       gl.uniform1f(U('uFocus'), C.imageFocus);
-      gl.uniform1f(U('uBlocks'), Math.max(Math.round(C.blocks), 4));
+      gl.uniform1f(U('uUnits'), Math.max(Math.round(C.pixelScale), 16));
+      gl.uniform1f(U('uMix'), C.sizeMix);
+      const maxPx = Math.max(Math.round(C.maxPixel), 1);
+      gl.uniform1f(U('uMaxPx'), maxPx);
+      gl.uniform1f(U('uMinPx'), Math.min(Math.max(Math.round(C.minPixel), 1), maxPx));
       gl.uniform1f(U('uSpotR'), C.spotRadius);
       gl.uniform1f(U('uCoreFrac'), C.coreSize);
       gl.uniform1f(U('uBlurMax'), C.edgeBlur);
@@ -752,7 +762,7 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uSeed'), seed);
       gl.uniform1f(U('uBlinkDen'), C.blinkDensity);
       gl.uniform1f(U('uBlinkBand'), C.blinkBand);
-      gl.uniform1f(U('uSpotMult'), C.spotScale);
+      gl.uniform1f(U('uSpotPx'), Math.max(Math.round(C.spotPixel), 1));
       gl.uniform1f(U('uJitter'), C.rimJitter);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
@@ -1361,10 +1371,10 @@ const EFFECTS = {
     fileAssets: { imageUpload: 'asset-pixelbg' },
     DEFAULTS: {
       imageOn: true, imageFocus: 0.1, bg: '#ffffff',
-      blocks: 32,
+      pixelScale: 128, sizeMix: 0.55, maxPixel: 4, minPixel: 1,
       spotRadius: 0.38, coreSize: 0.35, edgeBlur: 3, edgeSoftness: 0.3,
       blinkSpeed: 8, blinkDensity: 0.35, blinkBand: 0.22,
-      spotScale: 2, rimJitter: 0.35,
+      spotPixel: 2, rimJitter: 0.35,
       followEase: 9, wander: true, wanderSpeed: 0.5,
       dprCap: 2, paused: false,
     },
@@ -1376,12 +1386,15 @@ const EFFECTS = {
         ['background', 'bg', 'color'],
       ]],
       ['Mosaic', [
-        ['blocks across', 'blocks', 8, 128, 1],
+        ['pixel scale', 'pixelScale', 32, 256, 8],
+        ['size mix', 'sizeMix', 0, 1, 0.01],
+        ['max pixel size', 'maxPixel', 1, 8, 1],
+        ['min pixel size', 'minPixel', 1, 8, 1],
       ]],
       ['Spotlight', [
         ['radius', 'spotRadius', 0.08, 0.9, 0.01],
         ['clear core size', 'coreSize', 0.05, 0.95, 0.01],
-        ['spot pixels \u00d7', 'spotScale', 1.2, 12, 0.1],
+        ['spot pixel size', 'spotPixel', 1, 8, 1],
         ['edge blur', 'edgeBlur', 0, 6, 0.1],
         ['edge softness', 'edgeSoftness', 0.02, 0.9, 0.01],
         ['rim break-up', 'rimJitter', 0, 0.8, 0.01],
