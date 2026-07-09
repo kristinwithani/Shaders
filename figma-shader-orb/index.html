@@ -219,7 +219,7 @@
 
 <div id="wheelPop" hidden>
   <canvas id="wheelCv" width="180" height="180"></canvas>
-  <div class="row2"><span>hex</span><input id="wheelHexIn" maxlength="7" spellcheck="false"><button id="wheelClose" style="margin-left:auto">done</button></div>
+  <div class="row2"><span>hex</span><input id="wheelHexIn" maxlength="7" spellcheck="false"><button id="wheelPick" title="pick a colour from anywhere on screen">⌖ pick</button><button id="wheelClose" style="margin-left:auto">done</button></div>
 </div>
 
 <div id="codeDrawer" class="collapsed">
@@ -2025,6 +2025,21 @@ $('wheelHexIn').addEventListener('input', e => {
   drawWheel();                                   // field is not rewritten while typing
 });
 $('wheelHexIn').addEventListener('change', () => noteChange());
+$('wheelPick').onclick = async () => {
+  // native EyeDropper: samples any pixel on the entire desktop, not just the page
+  if (!window.EyeDropper) {
+    $('wheelHexIn').value = 'no support';
+    setTimeout(() => { $('wheelHexIn').value = C[wheelKey]; }, 1200);
+    return;
+  }
+  try {
+    const { sRGBHex } = await new EyeDropper().open();
+    [wheelH, wheelS, wheelLight] = hex2hsl(sRGBHex);
+    drawWheel();
+    wheelApply(true);
+    noteChange();
+  } catch (e) { /* user pressed Esc — nothing to do */ }
+};
 $('wheelClose').onclick = () => { $('wheelPop').hidden = true; };
 document.addEventListener('pointerdown', e => {
   const pop = $('wheelPop');
