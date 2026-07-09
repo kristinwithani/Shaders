@@ -1358,6 +1358,11 @@ function createEffect(canvas, C) {
     // the liquid is clipped softly at the fill line (the warped coordinate
     // makes the surface ripple); bubbles are exempt so they can escape
     f *= 1.0 - smoothstep(uFill + 0.03, uFill + 0.15, w.y);
+    // bubbles fade out near the top border so nothing is ever cut off by
+    // the frame — even when several bubbles merge into one bulging mass.
+    // Uses the UNWARPED coordinate: the goo-warp can offset w.y by ~0.15,
+    // which would let top-row pixels slip through a w-based fade.
+    fBub *= 1.0 - smoothstep(0.55, 0.80, p.y);
     f += fBub;
     // cursor shatter: carve noise holes near the cursor so approaching it
     // splits the lava apart, sometimes into small floating fragments
@@ -1698,6 +1703,10 @@ function createEffect(canvas, C) {
       const nMain = blobs.length;
       for (let i = 0; i < bubbles.length; i++) {
         const bu = bubbles[i];
+        const rr = C.blobSize * 0.38 * bu.r * C.bubbleSize;
+        // a metaball's visible edge reaches ~2.1x its radius past the center,
+        // so the bounce ceiling keeps the whole blob inside the top border
+        const ceil = Math.max(0.96 - rr * 2.4, C.fillLevel + 0.1);
         if (bu.state === 0) {                    // submerged, waiting
           bu.timer -= dt * Math.max(C.bubbleRate, 0.01);
           bu.y = C.fillLevel - 0.3 + Math.sin(simT * 1.1 + bu.wob) * 0.06;
@@ -1706,7 +1715,7 @@ function createEffect(canvas, C) {
         } else if (bu.state === 1) {             // rising free of the pool
           bu.y += bu.vy * dt;
           bu.x += Math.sin(simT * 2.0 + bu.wob) * 0.1 * dt;
-          if (bu.y >= 0.86) { bu.y = 0.86; bu.vy = -bu.vy * 0.45; bu.state = 2; }
+          if (bu.y >= ceil) { bu.y = ceil; bu.vy = -bu.vy * 0.45; bu.state = 2; }
         } else {                                 // bounced — falling back
           bu.vy -= C.bubbleSpeed * 1.5 * dt;
           bu.y += bu.vy * dt;
@@ -1717,7 +1726,7 @@ function createEffect(canvas, C) {
         }
         blobData[(nMain + i) * 4] = bu.x;
         blobData[(nMain + i) * 4 + 1] = bu.y;
-        blobData[(nMain + i) * 4 + 2] = C.blobSize * 0.38 * bu.r * C.bubbleSize;
+        blobData[(nMain + i) * 4 + 2] = rr;
         blobData[(nMain + i) * 4 + 3] = 1;       // bubble flag: exempt from the fill clip
       }
 
