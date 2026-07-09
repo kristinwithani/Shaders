@@ -1308,6 +1308,7 @@ function createEffect(canvas, C) {
   uniform vec3 uBg, uBg2, uLayerColor;
   uniform float uLayerOn, uLayerOpacity, uLayerReach;
   uniform float uImgOn, uImgAspect, uCanvasA, uFocus;
+  uniform float uImgFade, uImgFadeReach, uImgFadeTop;
   uniform sampler2D uImg;
   uniform vec3 uCols[8]; uniform int uNCols;
   out vec4 o;
@@ -1383,13 +1384,16 @@ function createEffect(canvas, C) {
     float e = min(fract(x), 1.0 - fract(x));
     float glow = exp(-e * e * 40.0) * uGlow * inBlob;
     band += glow * (band * 0.5 + vec3(0.6));
-    // background: optional image (cover-cropped), else the soft gradient
-    vec3 bg;
+    // background: soft gradient, with the optional image blended over it —
+    // the image's transparency runs as a gradient toward the chosen edge
+    vec3 bg = mix(uBg2, uBg, smoothstep(-1.1, 1.1, p.y));
     if (uImgOn > 0.5) {
       vec2 uvS = gl_FragCoord.xy / uRes;
-      bg = texture(uImg, coverUV(vec2(uvS.x, 1.0 - uvS.y))).rgb;
-    } else {
-      bg = mix(uBg2, uBg, smoothstep(-1.1, 1.1, p.y));
+      vec3 img = texture(uImg, coverUV(vec2(uvS.x, 1.0 - uvS.y))).rgb;
+      float tEdge = (p.y + 1.0) * 0.5;
+      if (uImgFadeTop < 0.5) tEdge = 1.0 - tEdge;   // default: fade toward the bottom
+      float a = 1.0 - uImgFade * smoothstep(1.0 - uImgFadeReach, 1.0, tEdge);
+      bg = mix(bg, img, a);
     }
     // toggleable scrim: a colour wash rising from the bottom
     if (uLayerOn > 0.5) {
@@ -1758,6 +1762,9 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgAspect'), imgAspect);
       gl.uniform1f(U('uCanvasA'), canvas.width / Math.max(canvas.height, 1));
       gl.uniform1f(U('uFocus'), C.imageFocus);
+      gl.uniform1f(U('uImgFade'), C.imageFade);
+      gl.uniform1f(U('uImgFadeReach'), C.imageFadeReach);
+      gl.uniform1f(U('uImgFadeTop'), C.imageFadeTop ? 1 : 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.uniform1i(U('uImg'), 0);
@@ -2180,6 +2187,7 @@ const EFFECTS = {
       fillLevel: 0, bubbleCount: 4, bubbleSize: 1, bubbleRate: 1, bubbleSpeed: 0.7,
       layerOn: false, layerColor: '#2a00ff', layerOpacity: 0.35, layerReach: 0.6,
       imageOn: true, imageFocus: 0.3,
+      imageFade: 0, imageFadeReach: 0.5, imageFadeTop: false,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
       nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
       lineWidth: 1, lineOpacity: 0.65, lineColor: '#2a00ff',
@@ -2212,6 +2220,9 @@ const EFFECTS = {
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
         ['crop focus', 'imageFocus', 0, 1, 0.01],
+        ['image fade', 'imageFade', 0, 1, 0.01],
+        ['fade reach', 'imageFadeReach', 0.05, 1, 0.01],
+        ['fade from top', 'imageFadeTop', 'check'],
         ['background top', 'bg', 'color'],
         ['background bottom', 'bg2', 'color'],
       ]],
