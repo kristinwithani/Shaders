@@ -221,7 +221,7 @@
      ============================================================ -->
 <script id="engine-orb" type="text/plain">
 function createEffect(canvas, C) {
-  const gl = canvas.getContext('webgl2', { antialias: false, desynchronized: true, powerPreference: 'high-performance' });
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' });
   const VS_TRI = `#version 300 es
   void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
   const FS_RINGS = `#version 300 es
@@ -451,7 +451,7 @@ function createEffect(canvas, C) {
      ============================================================ -->
 <script id="engine-lava" type="text/plain">
 function createEffect(canvas, C) {
-  const gl = canvas.getContext('webgl2', { antialias: false, desynchronized: true, powerPreference: 'high-performance' });
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' });
   const VS = `#version 300 es
   void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
   const FS = `#version 300 es
@@ -636,7 +636,7 @@ function createEffect(canvas, C) {
      ============================================================ -->
 <script id="engine-pixels" type="text/plain">
 function createEffect(canvas, C) {
-  const gl = canvas.getContext('webgl2', { antialias: false, desynchronized: true, powerPreference: 'high-performance' });
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' });
   const VS = `#version 300 es
   void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
   const FS = `#version 300 es
@@ -850,7 +850,7 @@ function createEffect(canvas, C) {
      ============================================================ -->
 <script id="engine-aura" type="text/plain">
 function createEffect(canvas, C) {
-  const gl = canvas.getContext('webgl2', { antialias: false, desynchronized: true, powerPreference: 'high-performance' });
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' });
   const VS = `#version 300 es
   void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
   const FS = `#version 300 es
@@ -1295,7 +1295,7 @@ function createEffect(canvas, C) {
      ============================================================ -->
 <script id="engine-cup" type="text/plain">
 function createEffect(canvas, C) {
-  const gl = canvas.getContext('webgl2', { antialias: false, desynchronized: true, powerPreference: 'high-performance' });
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' });
   const VS = `#version 300 es
   void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
   const FS = `#version 300 es
@@ -1737,7 +1737,7 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uMouseOn'), mouseNear ? 1 : 0);
       gl.uniform1f(U('uTime'), t);
       gl.uniform4fv(U('uBlobs'), blobData);
-      gl.uniform1i(U('uCount'), blobs.length + bubbles.length);
+      gl.uniform1i(U('uCount'), C.lavaOn ? blobs.length + bubbles.length : 0);
       gl.uniform1f(U('uSteps'), Math.max(Math.round(C.steps), 2));
       gl.uniform1f(U('uSoft'), C.softness);
       gl.uniform1f(U('uWarpAmt'), C.warpAmount);
@@ -2167,6 +2167,7 @@ const EFFECTS = {
     assets: ['asset-cupbg'],
     fileAssets: { imageUpload: 'asset-cupbg' },
     DEFAULTS: {
+      lavaOn: true,
       blobCount: 6, seed: 0, blobSize: 0.30,
       bg: '#ffffff', bg2: '#dbe4ff',
       bandCount: 4,
@@ -2189,6 +2190,7 @@ const EFFECTS = {
     },
     GROUPS: [
       ['Blobs', [
+        ['lava visible', 'lavaOn', 'check'],
         ['blob count', 'blobCount', 2, 8, 1, 'rebuild'],
         ['seed', 'seed', 0, 999, 1, 'rebuild'],
         ['blob size', 'blobSize', 0.05, 0.8, 0.005],
