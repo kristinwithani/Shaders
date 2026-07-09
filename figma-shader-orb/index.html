@@ -105,22 +105,6 @@
   .ctl output:hover { border-bottom-color: #111; }
   .ctl output[contenteditable] { outline: 1px solid #111; background: #fafafa; }
 
-  /* ---- colour wheel picker ---- */
-  .swatch { width: 100%; height: 20px; border: 1px solid var(--line); cursor: pointer; padding: 0; }
-  #wheelPop {
-    position: fixed; z-index: 20; background: #fff; border: 1px solid #111; padding: 12px;
-    display: flex; flex-direction: column; gap: 8px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
-    font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 10px; color: #111;
-  }
-  #wheelPop[hidden] { display: none !important; }
-  #wheelPop canvas { cursor: crosshair; display: block; }
-  #wheelPop .row2 { display: flex; gap: 8px; align-items: center; }
-  #wheelPop button { font: inherit; padding: 4px 8px; background: #111; color: #fff; border: none; cursor: pointer; }
-  #wheelHexIn {
-    font: inherit; width: 92px; padding: 4px 6px;
-    border: 1px solid var(--line); background: #fff; color: #111;
-  }
 
   #panel {
     width: 300px; height: 100vh; overflow-y: auto; flex-shrink: 0;
@@ -216,11 +200,6 @@
     <button class="act ghost" id="clear-save">clear saved</button>
   </div>
 </aside>
-
-<div id="wheelPop" hidden>
-  <canvas id="wheelCv" width="180" height="180"></canvas>
-  <div class="row2"><span>hex</span><input id="wheelHexIn" maxlength="7" spellcheck="false"><button id="wheelPick" title="pick a colour from anywhere on screen">⌖ pick</button><button id="wheelClose" style="margin-left:auto">done</button></div>
-</div>
 
 <div id="codeDrawer" class="collapsed">
   <div id="codeBar">
@@ -1525,12 +1504,12 @@ const EFFECTS = {
       ]],
       ['Blob colours', [
         ['palette count', 'paletteCount', 1, 6, 1],
-        ['colour 1', 'blobColor1', 'wheel'],
-        ['colour 2', 'blobColor2', 'wheel'],
-        ['colour 3', 'blobColor3', 'wheel'],
-        ['colour 4', 'blobColor4', 'wheel'],
-        ['colour 5', 'blobColor5', 'wheel'],
-        ['colour 6', 'blobColor6', 'wheel'],
+        ['colour 1', 'blobColor1', 'color'],
+        ['colour 2', 'blobColor2', 'color'],
+        ['colour 3', 'blobColor3', 'color'],
+        ['colour 4', 'blobColor4', 'color'],
+        ['colour 5', 'blobColor5', 'color'],
+        ['colour 6', 'blobColor6', 'color'],
         ['colour drift', 'colorDrift', 0, 0.2, 0.005],
         ['drift speed', 'driftSpeed', 0, 2, 0.01],
       ]],
@@ -1663,8 +1642,6 @@ function buildPanel(GROUPS) {
       let input, out = '';
       if (a === 'color') {
         input = `<input type="color" data-key="${key}" value="${C[key]}">`;
-      } else if (a === 'wheel') {
-        input = `<button class="swatch" data-key="${key}" style="background:${C[key]}"></button>`;
       } else if (a === 'file') {
         input = `<input type="file" data-key="${key}" accept="image/*,video/*">`;
       } else if (a === 'check') {
@@ -1704,7 +1681,6 @@ groupsEl.addEventListener('input', e => {
 function syncPanel() {
   for (const [key, el] of Object.entries(inputs)) {
     if (el.type === 'file') continue;
-    if (el.tagName === 'BUTTON') { el.style.background = C[key]; continue; }
     if (el.type === 'checkbox') el.checked = C[key];
     else el.value = C[key];
     const out = el.parentElement.querySelector('output');
@@ -1867,8 +1843,6 @@ for (const bid of ['reset', 'reseed']) {
 
 // ============================================================ EDITABLE NUMBERS
 groupsEl.addEventListener('click', e => {
-  const sw = e.target.closest('.swatch');
-  if (sw) { openWheel(sw); return; }
   const out = e.target.closest('output');
   if (!out || out.isContentEditable) return;
   const range = out.parentElement.querySelector('input[type="range"]');
@@ -1895,155 +1869,6 @@ groupsEl.addEventListener('click', e => {
     if (ev.key === 'Enter') { ev.preventDefault(); out.blur(); }
     else if (ev.key === 'Escape') { done(false); }
   };
-});
-
-// ============================================================ COLOUR WHEEL
-// hue ring outside, saturation x lightness square inside, editable hex.
-const wheelCv = $('wheelCv'), wheelCtx = wheelCv.getContext('2d');
-const WCX = 90, RING_IN = 70, RING_OUT = 88, SQ = 46;    // geometry (canvas px)
-let wheelKey = null, wheelH = 0, wheelS = 0, wheelLight = 50, wheelMode = null;
-function hex2hsl(hex) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
-  let h = 0;
-  if (d) {
-    if (mx === r) h = ((g - b) / d) % 6;
-    else if (mx === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60; if (h < 0) h += 360;
-  }
-  const l = (mx + mn) / 2;
-  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-  return [h, s * 100, l * 100];
-}
-function hsl2hex(h, s, l) {
-  s /= 100; l /= 100;
-  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
-  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
-    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
-  const to = v => Math.round((v + m) * 255).toString(16).padStart(2, '0');
-  return '#' + to(r) + to(g) + to(b);
-}
-const put = (img, i, hex) => {
-  img.data[i] = parseInt(hex.slice(1, 3), 16);
-  img.data[i + 1] = parseInt(hex.slice(3, 5), 16);
-  img.data[i + 2] = parseInt(hex.slice(5, 7), 16);
-  img.data[i + 3] = 255;
-};
-let ringImg = null;                              // the hue ring never changes
-function buildRing() {
-  ringImg = wheelCtx.createImageData(180, 180);
-  for (let y = 0; y < 180; y++) for (let x = 0; x < 180; x++) {
-    const dx = x - WCX, dy = y - WCX, r = Math.hypot(dx, dy), i = (y * 180 + x) * 4;
-    if (r < RING_IN || r > RING_OUT) continue;
-    const h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
-    put(ringImg, i, hsl2hex(h, 100, 50));
-  }
-}
-function marker(x, y) {
-  wheelCtx.beginPath();
-  wheelCtx.arc(x, y, 5, 0, 6.2832);
-  wheelCtx.strokeStyle = '#fff'; wheelCtx.lineWidth = 3; wheelCtx.stroke();
-  wheelCtx.beginPath();
-  wheelCtx.arc(x, y, 5, 0, 6.2832);
-  wheelCtx.strokeStyle = '#000'; wheelCtx.lineWidth = 1; wheelCtx.stroke();
-}
-function drawWheel() {
-  if (!ringImg) buildRing();
-  wheelCtx.clearRect(0, 0, 180, 180);
-  wheelCtx.putImageData(ringImg, 0, 0);
-  // saturation (x) by lightness (y, top = light) square at the current hue
-  const side = SQ * 2, img = wheelCtx.createImageData(side, side);
-  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
-    put(img, (y * side + x) * 4,
-      hsl2hex(wheelH, x / (side - 1) * 100, (1 - y / (side - 1)) * 100));
-  }
-  wheelCtx.putImageData(img, WCX - SQ, WCX - SQ);
-  // markers — same math the picker uses, so cursor and marker always agree
-  const a = wheelH * Math.PI / 180, rm = (RING_IN + RING_OUT) / 2;
-  marker(WCX + Math.cos(a) * rm, WCX + Math.sin(a) * rm);
-  marker(WCX - SQ + wheelS / 100 * (side - 1), WCX - SQ + (1 - wheelLight / 100) * (side - 1));
-}
-function wheelApply(updateField) {
-  const hex = hsl2hex(wheelH, wheelS, wheelLight);
-  C[wheelKey] = hex;
-  const sw = inputs[wheelKey];
-  if (sw) sw.style.background = hex;
-  if (updateField) $('wheelHexIn').value = hex;
-}
-function openWheel(sw) {
-  wheelKey = sw.dataset.key;
-  [wheelH, wheelS, wheelLight] = hex2hsl(C[wheelKey]);
-  $('wheelHexIn').value = C[wheelKey];
-  const r = sw.getBoundingClientRect();
-  const pop = $('wheelPop');
-  pop.style.top = Math.min(r.top, window.innerHeight - 270) + 'px';
-  pop.style.right = '310px';
-  pop.hidden = false;
-  drawWheel();
-}
-function canvasPos(e) {                          // client px -> canvas px, scale-proof
-  const r = wheelCv.getBoundingClientRect();
-  return [(e.clientX - r.left) * (wheelCv.width / r.width),
-          (e.clientY - r.top) * (wheelCv.height / r.height)];
-}
-function wheelPick(e) {
-  const [sx, sy] = canvasPos(e);
-  if (wheelMode === 'hue') {
-    wheelH = (Math.atan2(sy - WCX, sx - WCX) * 180 / Math.PI + 360) % 360;
-  } else {
-    const side = SQ * 2 - 1;
-    wheelS = Math.min(Math.max((sx - (WCX - SQ)) / side, 0), 1) * 100;
-    wheelLight = (1 - Math.min(Math.max((sy - (WCX - SQ)) / side, 0), 1)) * 100;
-  }
-  drawWheel();
-  wheelApply(true);
-}
-wheelCv.addEventListener('pointerdown', e => {
-  const [sx, sy] = canvasPos(e);
-  const r = Math.hypot(sx - WCX, sy - WCX);
-  if (r >= RING_IN - 3 && r <= RING_OUT + 4) wheelMode = 'hue';
-  else if (Math.abs(sx - WCX) <= SQ + 3 && Math.abs(sy - WCX) <= SQ + 3) wheelMode = 'sl';
-  else return;
-  wheelCv.setPointerCapture(e.pointerId);
-  wheelPick(e);
-});
-wheelCv.addEventListener('pointermove', e => { if (wheelMode) wheelPick(e); });
-wheelCv.addEventListener('pointerup', () => {
-  if (!wheelMode) return;
-  wheelMode = null;
-  noteChange();
-});
-$('wheelHexIn').addEventListener('input', e => {
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(e.target.value.trim());
-  if (!m) return;
-  const hex = '#' + m[1].toLowerCase();
-  [wheelH, wheelS, wheelLight] = hex2hsl(hex);
-  C[wheelKey] = hex;
-  const sw = inputs[wheelKey];
-  if (sw) sw.style.background = hex;
-  drawWheel();                                   // field is not rewritten while typing
-});
-$('wheelHexIn').addEventListener('change', () => noteChange());
-$('wheelPick').onclick = async () => {
-  // native EyeDropper: samples any pixel on the entire desktop, not just the page
-  if (!window.EyeDropper) {
-    $('wheelHexIn').value = 'no support';
-    setTimeout(() => { $('wheelHexIn').value = C[wheelKey]; }, 1200);
-    return;
-  }
-  try {
-    const { sRGBHex } = await new EyeDropper().open();
-    [wheelH, wheelS, wheelLight] = hex2hsl(sRGBHex);
-    drawWheel();
-    wheelApply(true);
-    noteChange();
-  } catch (e) { /* user pressed Esc — nothing to do */ }
-};
-$('wheelClose').onclick = () => { $('wheelPop').hidden = true; };
-document.addEventListener('pointerdown', e => {
-  const pop = $('wheelPop');
-  if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('.swatch')) pop.hidden = true;
 });
 
 // ============================================================ PERSISTENCE
