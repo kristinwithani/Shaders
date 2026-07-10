@@ -103,15 +103,6 @@
   }
   #codeDrawer.collapsed #codeArea { display: none; }
 
-  /* ---- teaching presets ---- */
-  #presetRow { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-  #presetRow span { font-size: 0.6875rem; color: #6a6a6a; letter-spacing: 0.05em; }
-  #presetRow button {
-    flex: 1; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
-    padding: 5px 6px; background: #fff; color: #111; border: 1px dashed #999; cursor: pointer;
-  }
-  #presetRow button:hover { border-style: solid; border-color: #111; }
-
   /* ---- undo / redo ---- */
   #histRow { display: flex; gap: 6px; margin-top: 8px; }
   #histRow button {
@@ -144,14 +135,26 @@
   #tabs button.active { background: #111; color: #fff; }
   #fps { color: var(--dim); }
   details { border-bottom: 1px solid var(--line); }
-  details { padding-bottom: 7px; }
-  summary {
-    padding: 13px 16px 7px; cursor: pointer; font-weight: 700;
-    letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.6875rem;
+  details.sec { border-bottom: 1px solid #c9c9c9; padding-bottom: 8px; }
+  details.sec > summary {
+    padding: 14px 16px 8px; cursor: pointer; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.75rem;
     color: #111; user-select: none; list-style: none;
+    display: flex; align-items: center; gap: 8px;
   }
-  summary::before { content: "▸ "; color: var(--dim); }
-  details[open] summary::before { content: "▾ "; }
+  details.sec > summary::before { content: "▸"; color: var(--dim); }
+  details.sec[open] > summary::before { content: "▾"; }
+  details.sec > summary .secToggle { margin-left: auto; accent-color: #111; }
+  details.sub { border-bottom: 1px solid var(--line); }
+  details.sub:last-child { border-bottom: none; }
+  details.sub > summary {
+    padding: 8px 16px 5px 26px; cursor: pointer; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.6875rem;
+    color: #555; user-select: none; list-style: none;
+  }
+  details.sub > summary::before { content: "▸ "; color: var(--dim); }
+  details.sub[open] > summary::before { content: "▾ "; }
+  details.sub .ctl { padding-left: 26px; }
   .ctl {
     display: grid; grid-template-columns: 1fr 52px;
     gap: 3px 10px; align-items: center; padding: 7px 16px 6px;
@@ -225,12 +228,6 @@
       <button data-shader="pixels">pixels</button>
       <button data-shader="aura">aura</button>
       <button data-shader="cup">cup</button>
-    </div>
-    <div id="presetRow">
-      <span>try</span>
-      <button data-preset="0" title="Pixels: a wide spotlight de-pixelating an image">lens</button>
-      <button data-preset="1" title="Lava: heavy cursor shatter and glow">tear</button>
-      <button data-preset="2" title="Cup: busy bubbles and a scrim layer">pour</button>
     </div>
     <div id="histRow">
       <button id="undoBtn" disabled>↶ undo</button>
@@ -1961,6 +1958,13 @@ const EFFECTS = {
     },
     hint: 'sweep your cursor through the spikes — they steer away',
     openGroups: ['Structure', 'Gradient rings', 'Spikes'],
+    LAYOUT: [
+      { t: 'orb', groups: ['Structure', 'Gradient rings', 'Spikes', 'End nodes'],
+        rename: { 'Structure': 'structure', 'Gradient rings': 'gradient rings', 'Spikes': 'spikes', 'End nodes': 'end nodes' } },
+      { t: 'motion', groups: ['Idle motion'] },
+      { t: 'cursor', groups: ['Cursor physics'] },
+      { t: 'general', groups: ['Performance'] },
+    ],
     bgKey: 'ring4',
     DEFAULTS: {
       count: 250, seed: 0, circleRadius: 0.90,
@@ -2041,6 +2045,11 @@ const EFFECTS = {
     },
     hint: 'move your cursor into the lava — it tears apart',
     openGroups: ['Blobs', 'Color steps'],
+    LAYOUT: [
+      { t: 'lava', groups: ['Blobs', 'Color steps', 'Motion', 'Cursor physics'],
+        rename: { 'Blobs': 'blobs', 'Color steps': 'color steps', 'Motion': 'motion', 'Cursor physics': 'cursor' } },
+      { t: 'general', groups: ['Performance'] },
+    ],
     bgKey: 'bg',
     DEFAULTS: {
       blobCount: 6, seed: 0, blobSize: 0.30,
@@ -2116,7 +2125,13 @@ const EFFECTS = {
       wanderSpeed: c => c.wander,
     },
     hint: 'the spotlight follows your cursor · upload your own image',
-    openGroups: ['Image', 'Mosaic', 'Spotlight'],
+    openGroups: ['Image / video', 'Mosaic', 'Spotlight'],
+    LAYOUT: [
+      { t: 'image', toggle: 'imageOn', groups: ['Image / video', 'Mosaic', 'Spotlight'],
+        rename: { 'Image / video': 'source', 'Mosaic': 'mosaic', 'Spotlight': 'spotlight' } },
+      { t: 'motion', groups: ['Motion'] },
+      { t: 'general', groups: ['Performance'] },
+    ],
     bgKey: 'bg',
     assets: ['asset-pixelbg'],
     fileAssets: { imageUpload: 'asset-pixelbg' },
@@ -2196,6 +2211,14 @@ const EFFECTS = {
     },
     hint: 'drag a web node to pull it · drag empty space to rotate',
     openGroups: ['Blobs', 'Blob colors'],
+    LAYOUT: [
+      { t: 'blobs', groups: ['Blobs', 'Blob colors', 'Motion'],
+        rename: { 'Blobs': 'shape', 'Blob colors': 'colors', 'Motion': 'motion' } },
+      { t: 'background', groups: ['Background'] },
+      { t: 'web', toggle: 'webOn', groups: ['Web structure', 'Web nodes', 'Web lines', 'Web depth', 'Web physics', 'Web motion'],
+        rename: { 'Web structure': 'structure', 'Web nodes': 'nodes', 'Web lines': 'lines', 'Web depth': 'depth', 'Web physics': 'physics', 'Web motion': 'motion' } },
+      { t: 'general', groups: ['Performance'] },
+    ],
     bgKey: 'bg1',
     DEFAULTS: {
       count: 7, seed: 0, size: 0.34, sizeVariation: 0.45,
@@ -2351,6 +2374,15 @@ const EFFECTS = {
     },
     hint: 'stir the lava with your cursor · drag the web · watch the bubbles',
     openGroups: ['Blobs', 'Fill', 'Layer', 'Background'],
+    LAYOUT: [
+      { t: 'background', groups: ['Background'] },
+      { t: 'scrim layer', toggle: 'layerOn', groups: ['Layer'] },
+      { t: 'lava', toggle: 'lavaOn', groups: ['Blobs', 'Fill', 'Color steps', 'Motion', 'Cursor physics'],
+        rename: { 'Blobs': 'blobs', 'Fill': 'fill & bubbles', 'Color steps': 'color bands', 'Motion': 'motion', 'Cursor physics': 'cursor' } },
+      { t: 'web', toggle: 'webOn', groups: ['Web structure', 'Web nodes', 'Web lines', 'Web depth', 'Web physics', 'Web motion'],
+        rename: { 'Web structure': 'structure', 'Web nodes': 'nodes', 'Web lines': 'lines', 'Web depth': 'depth', 'Web physics': 'physics', 'Web motion': 'motion' } },
+      { t: 'general', groups: ['Performance'] },
+    ],
     bgKey: 'bg',
     frame: { aspect: '4 / 3', radius: '0' },
     assets: ['asset-cupbg'],
@@ -2580,35 +2612,70 @@ let inputs = {};
 function buildPanel(GROUPS) {
   groupsEl.textContent = '';
   inputs = {};
-  for (const [title, items] of GROUPS) {
+  const og = EFFECTS[activeId] && EFFECTS[activeId].openGroups;
+  // resolve the layer layout: sections own the groups that control one layer
+  const byTitle = {};
+  for (const [t, items] of GROUPS) byTitle[t] = items;
+  const layout = EFFECTS[activeId] && EFFECTS[activeId].LAYOUT;
+  const SECTIONS = layout
+    ? layout.map(sec => {
+        const pulled = sec.groups.map(g => [
+          (sec.rename && sec.rename[g]) || g,
+          (byTitle[g] || []).filter(it => it[1] !== sec.toggle),
+          g,
+        ]);
+        return sec.groups.length > 1
+          ? { t: sec.t, toggle: sec.toggle, sub: pulled }
+          : { t: sec.t, toggle: sec.toggle, items: pulled[0][1] };
+      })
+    : GROUPS.map(([t, items]) => ({ t, items }));
+  const buildRow = (host, item) => {
+    const [label, key, a, b, step, mode] = item;
+    const row = document.createElement('div');
+    row.className = 'ctl';
+    let input, out = '';
+    if (a === 'color') {
+      input = `<input type="color" data-key="${key}" value="${C[key]}" aria-label="${label}">`;
+    } else if (a === 'file') {
+      input = `<button type="button" class="fileBtn">choose file…</button>` +
+        `<input type="file" data-key="${key}" accept="image/*,video/*" hidden aria-label="${label}">`;
+    } else if (a === 'check') {
+      input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
+    } else if (a === 'seg') {
+      input = `<div class="segRow" data-key="${key}" role="radiogroup" aria-label="${label}">` +
+        b.map((g, i) => `<button type="button" data-val="${i}" class="${Math.round(C[key]) === i ? 'on' : ''}" aria-label="${label} ${i}">${g}</button>`).join('') + `</div>`;
+    } else {
+      input = `<input type="range" data-key="${key}" min="${a}" max="${b}" step="${step}" value="${C[key]}" aria-label="${label}" ${mode === 'rebuild' ? 'data-rebuild=1' : ''}>`;
+      out = `<output>${C[key]}</output>`;
+    }
+    row.innerHTML = `<label title="${key}">${label}</label>${input}${out}`;
+    host.appendChild(row);
+    inputs[key] = row.querySelector('input, .segRow');
+  };
+  for (const sec of SECTIONS) {
     const det = document.createElement('details');
-    // essentials open by default; advanced groups start collapsed
-    const og = EFFECTS[activeId] && EFFECTS[activeId].openGroups;
-    det.open = !og || og.includes(title);
-    det.innerHTML = `<summary>${title}</summary>`;
-    for (const [label, key, a, b, step, mode] of items) {
-      const row = document.createElement('div');
-      row.className = 'ctl';
-      let input, out = '';
-      if (a === 'color') {
-        input = `<input type="color" data-key="${key}" value="${C[key]}" aria-label="${label}">`;
-      } else if (a === 'file') {
-        input = `<button type="button" class="fileBtn">choose file…</button>` +
-          `<input type="file" data-key="${key}" accept="image/*,video/*" hidden aria-label="${label}">`;
-      } else if (a === 'check') {
-        input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
-      } else if (a === 'seg') {
-        input = `<div class="segRow" data-key="${key}" role="radiogroup" aria-label="${label}">` +
-          b.map((g, i) => `<button type="button" data-val="${i}" class="${Math.round(C[key]) === i ? 'on' : ''}" aria-label="${label} ${i}">${g}</button>`).join('') + `</div>`;
-      } else {
-        input = `<input type="range" data-key="${key}" min="${a}" max="${b}" step="${step}" value="${C[key]}" aria-label="${label}" ${mode === 'rebuild' ? 'data-rebuild=1' : ''}>`;
-        out = `<output>${C[key]}</output>`;
+    det.className = 'sec';
+    det.open = true;
+    let head = `<summary><span>${sec.t}</span>`;
+    if (sec.toggle) {
+      head += `<input type="checkbox" class="secToggle" data-key="${sec.toggle}" ${C[sec.toggle] ? 'checked' : ''} aria-label="${sec.t} visible">`;
+    }
+    head += `</summary>`;
+    det.innerHTML = head;
+    for (const [subTitle, items, orig] of (sec.sub || [[null, sec.items]])) {
+      let host = det;
+      if (subTitle) {
+        const sd = document.createElement('details');
+        sd.className = 'sub';
+        sd.open = !og || og.includes(orig || subTitle) || og.includes(subTitle);
+        sd.innerHTML = `<summary>${subTitle}</summary>`;
+        det.appendChild(sd);
+        host = sd;
       }
-      row.innerHTML = `<label title="${key}">${label}</label>${input}${out}`;
-      det.appendChild(row);
-      inputs[key] = row.querySelector('input, .segRow');
+      for (const item of items) buildRow(host, item);
     }
     groupsEl.appendChild(det);
+    if (sec.toggle) inputs[sec.toggle] = det.querySelector('.secToggle');
   }
 }
 const customAssets = {};                         // uploaded images, by asset id
@@ -2663,21 +2730,6 @@ function syncPanel() {
 document.querySelectorAll('#tabs button').forEach(b =>
   b.addEventListener('click', () => { setShader(b.dataset.shader); noteChange(); }));
 
-// teaching presets: one click to a tuned look — shows what the sliders can do
-const PRESETS = [
-  { shader: 'pixels', set: { spotRadius: 0.55, edgeBlur: 4, pixelScale: 96, coreSize: 0.5 } },
-  { shader: 'lava', set: { shatter: 1.6, cursorPull: -2, glow: 0.65, tightness: 2.2 } },
-  { shader: 'cup', set: { bubbleCount: 7, bubbleRate: 2.2, bubbleSpeed: 1.1, layerOn: true, layerOpacity: 0.3 } },
-];
-document.querySelectorAll('#presetRow button').forEach(b =>
-  b.addEventListener('click', () => {
-    const p = PRESETS[+b.dataset.preset];
-    setShader(p.shader);
-    Object.assign(C, p.set);
-    syncPanel();
-    effect.rebuild();
-    noteChange();
-  }));
 document.getElementById('reset').onclick = () => {
   configs[activeId] = { ...EFFECTS[activeId].DEFAULTS };
   setShader(activeId);
