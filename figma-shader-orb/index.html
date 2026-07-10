@@ -104,7 +104,7 @@
   #codeDrawer.collapsed #codeArea { display: none; }
 
   /* ---- undo / redo ---- */
-  #histRow { display: flex; gap: 6px; margin-top: 8px; }
+  #histRow { display: flex; gap: 6px; }
   #histRow button {
     flex: 1; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 6px; background: #fff; color: #111; border: 1px solid #111; cursor: pointer;
@@ -124,16 +124,16 @@
   }
   #panel header {
     position: sticky; top: 0; background: #fff; z-index: 2;
-    padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+    padding: 16px 16px 12px; border-bottom: 1px solid var(--line);
   }
-  #panel header h1 { margin: 0 0 8px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.09em; }
-  #tabs { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid #111; margin-bottom: 8px; }
+  #panel header h1 { margin: 0 0 12px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.09em; }
+  #tabs { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid #111; margin-bottom: 6px; }
   #tabs button {
     flex: 1 1 0; font: inherit; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 7px 4px; background: #fff; color: #111; border: none; cursor: pointer;
   }
   #tabs button.active { background: #111; color: #fff; }
-  #fps { color: var(--dim); }
+  #fps { color: var(--dim); margin-top: 12px; min-height: 1em; }
   details { border-bottom: 1px solid var(--line); }
   details.sec { border-bottom: 1px solid #c9c9c9; padding-bottom: 8px; }
   details.sec > summary {
@@ -239,7 +239,10 @@
   <div class="row">
     <button class="act" id="dl-html">↓ HTML file</button>
     <button class="act ghost" id="dl-json">↓ preset</button>
+  </div>
+  <div class="row" style="padding-top: 0;">
     <button class="act ghost" id="dl-mp4">↓ mp4 10s</button>
+    <button class="act ghost" id="dl-png">↓ png</button>
   </div>
   <div class="row">
     <button class="act ghost" id="reset">reset shader</button>
@@ -2996,6 +2999,9 @@ document.getElementById('dl-html').onclick = () => {
   const { paused, ...cfg } = C;
   download(`${activeId}.html`, buildStandalone(activeId, cfg), 'text/html');
 };
+let pngRequest = false;
+document.getElementById('dl-png').onclick = () => { pngRequest = true; };
+
 document.getElementById('dl-mp4').onclick = e => {
   const btn = e.target;
   if (btn.dataset.busy) return;
@@ -3147,6 +3153,19 @@ if (params.has('t')) {
         effectBroken = true;
         setCodeStatus('runtime error — ' + String(err.message || err));
       }
+    }
+    if (pngRequest) {
+      pngRequest = false;
+      const cv = document.getElementById('c');
+      cv.toBlob(blob => {
+        if (!blob) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${activeId}.png`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }, 'image/png');
+      flash(document.getElementById('dl-png'), '✓ saved');
     }
     ema = ema * 0.95 + dt * 1000 * 0.05;
     fpsEl.textContent = `${activeId} · ${(1000 / ema).toFixed(0)} fps · ${ema.toFixed(2)} ms`;
