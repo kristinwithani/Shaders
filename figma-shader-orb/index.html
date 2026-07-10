@@ -165,6 +165,17 @@
     border: 1px solid var(--line); cursor: pointer; text-align: left;
   }
   .ctl .fileBtn:hover { border-color: #111; }
+  .segRow { grid-column: 1 / -1; display: flex; gap: 4px; }
+  .segRow button {
+    flex: 1; font: inherit; padding: 4px 0; background: #fff; color: #111;
+    border: 1px solid var(--line); cursor: pointer;
+  }
+  .segRow button:hover { border-color: #111; }
+  .segRow button.on { background: #111; color: #fff; border-color: #111; }
+
+  /* gated controls: dimmed + disabled while their layer is off */
+  .ctl.inactive { opacity: 0.35; }
+  .ctl.inactive input, .ctl.inactive .segRow button, .ctl.inactive .fileBtn { pointer-events: none; }
   .ctl output { text-align: right; color: #111; font-weight: 700; font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; height: 18px; accent-color: #111; }
   input[type=color] { width: 100%; height: 20px; padding: 0; border: 1px solid var(--line); background: none; }
@@ -1216,113 +1227,115 @@ function createEffect(canvas, C) {
       gl.uniform3f(U('uBg2'), ...hex(C.bg2));
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // ---- web overlay on top ----
+      if (C.webOn) {
 
-      yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
-      pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
-      const chase = 1 - Math.exp(-dt * C.swingDelay);
-      yaw += (yawTarget - yaw) * chase;
-      pitch += (pitchTarget - pitch) * chase;
-      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-      // R = Ry(yaw) * Rx(pitch); columns for model->view
-      const rot = m => {
-        const y1 = m[1] * cp - m[2] * sp, z1 = m[1] * sp + m[2] * cp;
-        return [m[0] * cy + z1 * sy, y1, -m[0] * sy + z1 * cy];
-      };
-      const invRot = v => {           // transpose
-        const x1 = v[0] * cy - v[2] * sy, z1 = v[0] * sy + v[2] * cy;
-        return [x1, v[1] * cp + z1 * sp, -v[1] * sp + z1 * cp];
-      };
+        yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
+        pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
+        const chase = 1 - Math.exp(-dt * C.swingDelay);
+        yaw += (yawTarget - yaw) * chase;
+        pitch += (pitchTarget - pitch) * chase;
+        const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        // R = Ry(yaw) * Rx(pitch); columns for model->view
+        const rot = m => {
+          const y1 = m[1] * cp - m[2] * sp, z1 = m[1] * sp + m[2] * cp;
+          return [m[0] * cy + z1 * sy, y1, -m[0] * sy + z1 * cy];
+        };
+        const invRot = v => {           // transpose
+          const x1 = v[0] * cy - v[2] * sy, z1 = v[0] * sy + v[2] * cy;
+          return [x1, v[1] * cp + z1 * sp, -v[1] * sp + z1 * cp];
+        };
 
-      // ---- spring physics in model space ----
-      const kWeb = C.webStiffness, kSnap = C.snapStiffness;
-      const damp = Math.exp(-C.snapDamping * dt);
-      for (const e of edges) {
-        const A = nodes[e.a], B = nodes[e.b];
-        const ax = A.rest[0] + A.disp[0], ay = A.rest[1] + A.disp[1], az = A.rest[2] + A.disp[2];
-        const bx = B.rest[0] + B.disp[0], by = B.rest[1] + B.disp[1], bz = B.rest[2] + B.disp[2];
-        let dx = ax - bx, dy = ay - by, dz = az - bz;
-        const len = Math.max(Math.hypot(dx, dy, dz), 1e-5);
-        const f = kWeb * (len - e.len) / len * dt;
-        dx *= f; dy *= f; dz *= f;
-        A.vel[0] -= dx; A.vel[1] -= dy; A.vel[2] -= dz;
-        B.vel[0] += dx; B.vel[1] += dy; B.vel[2] += dz;
-      }
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        if (i === dragIdx) {
-          // hard constraint: dragged node follows the pointer in its depth plane
-          const view = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-          const target = invRot([dragTarget[0] / Math.max(n.s, 0.3), dragTarget[1] / Math.max(n.s, 0.3), view[2]]);
-          n.disp[0] = target[0] - n.rest[0]; n.disp[1] = target[1] - n.rest[1]; n.disp[2] = target[2] - n.rest[2];
-          n.vel = [0, 0, 0];
-          continue;
+        // ---- spring physics in model space ----
+        const kWeb = C.webStiffness, kSnap = C.snapStiffness;
+        const damp = Math.exp(-C.snapDamping * dt);
+        for (const e of edges) {
+          const A = nodes[e.a], B = nodes[e.b];
+          const ax = A.rest[0] + A.disp[0], ay = A.rest[1] + A.disp[1], az = A.rest[2] + A.disp[2];
+          const bx = B.rest[0] + B.disp[0], by = B.rest[1] + B.disp[1], bz = B.rest[2] + B.disp[2];
+          let dx = ax - bx, dy = ay - by, dz = az - bz;
+          const len = Math.max(Math.hypot(dx, dy, dz), 1e-5);
+          const f = kWeb * (len - e.len) / len * dt;
+          dx *= f; dy *= f; dz *= f;
+          A.vel[0] -= dx; A.vel[1] -= dy; A.vel[2] -= dz;
+          B.vel[0] += dx; B.vel[1] += dy; B.vel[2] += dz;
         }
-        for (let a = 0; a < 3; a++) {
-          n.vel[a] -= n.disp[a] * kSnap * dt;   // snap home -> core stays fixed
-          n.vel[a] *= damp;
-          n.disp[a] += n.vel[a] * dt;
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          if (i === dragIdx) {
+            // hard constraint: dragged node follows the pointer in its depth plane
+            const view = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
+            const target = invRot([dragTarget[0] / Math.max(n.s, 0.3), dragTarget[1] / Math.max(n.s, 0.3), view[2]]);
+            n.disp[0] = target[0] - n.rest[0]; n.disp[1] = target[1] - n.rest[1]; n.disp[2] = target[2] - n.rest[2];
+            n.vel = [0, 0, 0];
+            continue;
+          }
+          for (let a = 0; a < 3; a++) {
+            n.vel[a] -= n.disp[a] * kSnap * dt;   // snap home -> core stays fixed
+            n.vel[a] *= damp;
+            n.disp[a] += n.vel[a] * dt;
+          }
         }
+
+        // ---- project, depth-sort, fill instance buffers ----
+        const persp = C.perspective;
+        const order = [];
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          const v = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
+          const s = persp / Math.max(persp - v[2], 0.4);
+          n.px = v[0] * s; n.py = v[1] * s; n.s = s;
+          n.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
+          n.z = v[2];
+          order.push(i);
+        }
+        order.sort((a, b) => nodes[a].z - nodes[b].z);           // far first
+        const eOrder = edges.map((e, i) => i)
+          .sort((a, b) => (nodes[edges[a].a].z + nodes[edges[a].b].z) - (nodes[edges[b].a].z + nodes[edges[b].b].z));
+
+        const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
+        const fade = C.depthFade, dSize = C.depthShrink;
+        let nE = 0;
+        for (const ei of eOrder) {
+          const e = edges[ei], A = nodes[e.a], B = nodes[e.b];
+          const depth = (A.depth + B.depth) * 0.5;
+          segData[nE * 4] = A.px; segData[nE * 4 + 1] = A.py;
+          segData[nE * 4 + 2] = B.px; segData[nE * 4 + 3] = B.py;
+          segMeta[nE * 2] = C.lineWidth * (1 - dSize * (1 - depth)) * dprScale;
+          segMeta[nE * 2 + 1] = C.lineOpacity * (1 - fade * (1 - depth));
+          nE++;
+        }
+        let nD = 0;
+        for (const i of order) {
+          const n = nodes[i];
+          dotData[nD * 4] = n.px; dotData[nD * 4 + 1] = n.py;
+          dotData[nD * 4 + 2] = C.nodeSize * (1 - dSize * (1 - n.depth)) * n.s * dprScale;
+          dotData[nD * 4 + 3] = 1 - fade * (1 - n.depth);
+          nD++;
+        }
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.useProgram(wProgLine);
+        gl.uniform2f(WU(wProgLine, 'uRes'), canvas.width, canvas.height);
+        gl.uniform3f(WU(wProgLine, 'uColor'), ...wHex(C.lineColor));
+        gl.bindVertexArray(wVaoLine);
+        gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData.subarray(0, nE * 4));
+        gl.bindBuffer(gl.ARRAY_BUFFER, segMetaBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segMeta.subarray(0, nE * 2));
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nE);
+
+        gl.useProgram(wProgDot);
+        gl.uniform2f(WU(wProgDot, 'uRes'), canvas.width, canvas.height);
+        gl.uniform3f(WU(wProgDot, 'uColor'), ...wHex(C.nodeColor));
+        gl.uniform1f(WU(wProgDot, 'uShape'), Math.round(C.nodeShape));
+        gl.bindVertexArray(wVaoDot);
+        gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData.subarray(0, nD * 4));
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nD);
+        gl.bindVertexArray(null);
       }
-
-      // ---- project, depth-sort, fill instance buffers ----
-      const persp = C.perspective;
-      const order = [];
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        const v = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-        const s = persp / Math.max(persp - v[2], 0.4);
-        n.px = v[0] * s; n.py = v[1] * s; n.s = s;
-        n.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
-        n.z = v[2];
-        order.push(i);
-      }
-      order.sort((a, b) => nodes[a].z - nodes[b].z);           // far first
-      const eOrder = edges.map((e, i) => i)
-        .sort((a, b) => (nodes[edges[a].a].z + nodes[edges[a].b].z) - (nodes[edges[b].a].z + nodes[edges[b].b].z));
-
-      const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
-      const fade = C.depthFade, dSize = C.depthShrink;
-      let nE = 0;
-      for (const ei of eOrder) {
-        const e = edges[ei], A = nodes[e.a], B = nodes[e.b];
-        const depth = (A.depth + B.depth) * 0.5;
-        segData[nE * 4] = A.px; segData[nE * 4 + 1] = A.py;
-        segData[nE * 4 + 2] = B.px; segData[nE * 4 + 3] = B.py;
-        segMeta[nE * 2] = C.lineWidth * (1 - dSize * (1 - depth)) * dprScale;
-        segMeta[nE * 2 + 1] = C.lineOpacity * (1 - fade * (1 - depth));
-        nE++;
-      }
-      let nD = 0;
-      for (const i of order) {
-        const n = nodes[i];
-        dotData[nD * 4] = n.px; dotData[nD * 4 + 1] = n.py;
-        dotData[nD * 4 + 2] = C.nodeSize * (1 - dSize * (1 - n.depth)) * n.s * dprScale;
-        dotData[nD * 4 + 3] = 1 - fade * (1 - n.depth);
-        nD++;
-      }
-
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-      gl.useProgram(wProgLine);
-      gl.uniform2f(WU(wProgLine, 'uRes'), canvas.width, canvas.height);
-      gl.uniform3f(WU(wProgLine, 'uColor'), ...wHex(C.lineColor));
-      gl.bindVertexArray(wVaoLine);
-      gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData.subarray(0, nE * 4));
-      gl.bindBuffer(gl.ARRAY_BUFFER, segMetaBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, segMeta.subarray(0, nE * 2));
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nE);
-
-      gl.useProgram(wProgDot);
-      gl.uniform2f(WU(wProgDot, 'uRes'), canvas.width, canvas.height);
-      gl.uniform3f(WU(wProgDot, 'uColor'), ...wHex(C.nodeColor));
-      gl.uniform1f(WU(wProgDot, 'uShape'), Math.round(C.nodeShape));
-      gl.bindVertexArray(wVaoDot);
-      gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData.subarray(0, nD * 4));
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nD);
-      gl.bindVertexArray(null);
     },
   };
 }
@@ -1819,113 +1832,115 @@ function createEffect(canvas, C) {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // ---- web overlay on top ----
+      if (C.webOn) {
 
-      yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
-      pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
-      const chase = 1 - Math.exp(-dt * C.swingDelay);
-      yaw += (yawTarget - yaw) * chase;
-      pitch += (pitchTarget - pitch) * chase;
-      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-      // R = Ry(yaw) * Rx(pitch); columns for model->view
-      const rot = m => {
-        const y1 = m[1] * cp - m[2] * sp, z1 = m[1] * sp + m[2] * cp;
-        return [m[0] * cy + z1 * sy, y1, -m[0] * sy + z1 * cy];
-      };
-      const invRot = v => {           // transpose
-        const x1 = v[0] * cy - v[2] * sy, z1 = v[0] * sy + v[2] * cy;
-        return [x1, v[1] * cp + z1 * sp, -v[1] * sp + z1 * cp];
-      };
+        yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
+        pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
+        const chase = 1 - Math.exp(-dt * C.swingDelay);
+        yaw += (yawTarget - yaw) * chase;
+        pitch += (pitchTarget - pitch) * chase;
+        const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        // R = Ry(yaw) * Rx(pitch); columns for model->view
+        const rot = m => {
+          const y1 = m[1] * cp - m[2] * sp, z1 = m[1] * sp + m[2] * cp;
+          return [m[0] * cy + z1 * sy, y1, -m[0] * sy + z1 * cy];
+        };
+        const invRot = v => {           // transpose
+          const x1 = v[0] * cy - v[2] * sy, z1 = v[0] * sy + v[2] * cy;
+          return [x1, v[1] * cp + z1 * sp, -v[1] * sp + z1 * cp];
+        };
 
-      // ---- spring physics in model space ----
-      const kWeb = C.webStiffness, kSnap = C.snapStiffness;
-      const damp = Math.exp(-C.snapDamping * dt);
-      for (const e of edges) {
-        const A = nodes[e.a], B = nodes[e.b];
-        const ax = A.rest[0] + A.disp[0], ay = A.rest[1] + A.disp[1], az = A.rest[2] + A.disp[2];
-        const bx = B.rest[0] + B.disp[0], by = B.rest[1] + B.disp[1], bz = B.rest[2] + B.disp[2];
-        let dx = ax - bx, dy = ay - by, dz = az - bz;
-        const len = Math.max(Math.hypot(dx, dy, dz), 1e-5);
-        const f = kWeb * (len - e.len) / len * dt;
-        dx *= f; dy *= f; dz *= f;
-        A.vel[0] -= dx; A.vel[1] -= dy; A.vel[2] -= dz;
-        B.vel[0] += dx; B.vel[1] += dy; B.vel[2] += dz;
-      }
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        if (i === dragIdx) {
-          // hard constraint: dragged node follows the pointer in its depth plane
-          const view = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-          const target = invRot([dragTarget[0] / Math.max(n.s, 0.3), dragTarget[1] / Math.max(n.s, 0.3), view[2]]);
-          n.disp[0] = target[0] - n.rest[0]; n.disp[1] = target[1] - n.rest[1]; n.disp[2] = target[2] - n.rest[2];
-          n.vel = [0, 0, 0];
-          continue;
+        // ---- spring physics in model space ----
+        const kWeb = C.webStiffness, kSnap = C.snapStiffness;
+        const damp = Math.exp(-C.snapDamping * dt);
+        for (const e of edges) {
+          const A = nodes[e.a], B = nodes[e.b];
+          const ax = A.rest[0] + A.disp[0], ay = A.rest[1] + A.disp[1], az = A.rest[2] + A.disp[2];
+          const bx = B.rest[0] + B.disp[0], by = B.rest[1] + B.disp[1], bz = B.rest[2] + B.disp[2];
+          let dx = ax - bx, dy = ay - by, dz = az - bz;
+          const len = Math.max(Math.hypot(dx, dy, dz), 1e-5);
+          const f = kWeb * (len - e.len) / len * dt;
+          dx *= f; dy *= f; dz *= f;
+          A.vel[0] -= dx; A.vel[1] -= dy; A.vel[2] -= dz;
+          B.vel[0] += dx; B.vel[1] += dy; B.vel[2] += dz;
         }
-        for (let a = 0; a < 3; a++) {
-          n.vel[a] -= n.disp[a] * kSnap * dt;   // snap home -> core stays fixed
-          n.vel[a] *= damp;
-          n.disp[a] += n.vel[a] * dt;
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          if (i === dragIdx) {
+            // hard constraint: dragged node follows the pointer in its depth plane
+            const view = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
+            const target = invRot([dragTarget[0] / Math.max(n.s, 0.3), dragTarget[1] / Math.max(n.s, 0.3), view[2]]);
+            n.disp[0] = target[0] - n.rest[0]; n.disp[1] = target[1] - n.rest[1]; n.disp[2] = target[2] - n.rest[2];
+            n.vel = [0, 0, 0];
+            continue;
+          }
+          for (let a = 0; a < 3; a++) {
+            n.vel[a] -= n.disp[a] * kSnap * dt;   // snap home -> core stays fixed
+            n.vel[a] *= damp;
+            n.disp[a] += n.vel[a] * dt;
+          }
         }
+
+        // ---- project, depth-sort, fill instance buffers ----
+        const persp = C.perspective;
+        const order = [];
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          const v = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
+          const s = persp / Math.max(persp - v[2], 0.4);
+          n.px = v[0] * s; n.py = v[1] * s; n.s = s;
+          n.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
+          n.z = v[2];
+          order.push(i);
+        }
+        order.sort((a, b) => nodes[a].z - nodes[b].z);           // far first
+        const eOrder = edges.map((e, i) => i)
+          .sort((a, b) => (nodes[edges[a].a].z + nodes[edges[a].b].z) - (nodes[edges[b].a].z + nodes[edges[b].b].z));
+
+        const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
+        const fade = C.depthFade, dSize = C.depthShrink;
+        let nE = 0;
+        for (const ei of eOrder) {
+          const e = edges[ei], A = nodes[e.a], B = nodes[e.b];
+          const depth = (A.depth + B.depth) * 0.5;
+          segData[nE * 4] = A.px; segData[nE * 4 + 1] = A.py;
+          segData[nE * 4 + 2] = B.px; segData[nE * 4 + 3] = B.py;
+          segMeta[nE * 2] = C.lineWidth * (1 - dSize * (1 - depth)) * dprScale;
+          segMeta[nE * 2 + 1] = C.lineOpacity * (1 - fade * (1 - depth));
+          nE++;
+        }
+        let nD = 0;
+        for (const i of order) {
+          const n = nodes[i];
+          dotData[nD * 4] = n.px; dotData[nD * 4 + 1] = n.py;
+          dotData[nD * 4 + 2] = C.nodeSize * (1 - dSize * (1 - n.depth)) * n.s * dprScale;
+          dotData[nD * 4 + 3] = 1 - fade * (1 - n.depth);
+          nD++;
+        }
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.useProgram(wProgLine);
+        gl.uniform2f(WU(wProgLine, 'uRes'), canvas.width, canvas.height);
+        gl.uniform3f(WU(wProgLine, 'uColor'), ...wHex(C.lineColor));
+        gl.bindVertexArray(wVaoLine);
+        gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData.subarray(0, nE * 4));
+        gl.bindBuffer(gl.ARRAY_BUFFER, segMetaBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segMeta.subarray(0, nE * 2));
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nE);
+
+        gl.useProgram(wProgDot);
+        gl.uniform2f(WU(wProgDot, 'uRes'), canvas.width, canvas.height);
+        gl.uniform3f(WU(wProgDot, 'uColor'), ...wHex(C.nodeColor));
+        gl.uniform1f(WU(wProgDot, 'uShape'), Math.round(C.nodeShape));
+        gl.bindVertexArray(wVaoDot);
+        gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData.subarray(0, nD * 4));
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nD);
+        gl.bindVertexArray(null);
       }
-
-      // ---- project, depth-sort, fill instance buffers ----
-      const persp = C.perspective;
-      const order = [];
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        const v = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-        const s = persp / Math.max(persp - v[2], 0.4);
-        n.px = v[0] * s; n.py = v[1] * s; n.s = s;
-        n.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
-        n.z = v[2];
-        order.push(i);
-      }
-      order.sort((a, b) => nodes[a].z - nodes[b].z);           // far first
-      const eOrder = edges.map((e, i) => i)
-        .sort((a, b) => (nodes[edges[a].a].z + nodes[edges[a].b].z) - (nodes[edges[b].a].z + nodes[edges[b].b].z));
-
-      const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
-      const fade = C.depthFade, dSize = C.depthShrink;
-      let nE = 0;
-      for (const ei of eOrder) {
-        const e = edges[ei], A = nodes[e.a], B = nodes[e.b];
-        const depth = (A.depth + B.depth) * 0.5;
-        segData[nE * 4] = A.px; segData[nE * 4 + 1] = A.py;
-        segData[nE * 4 + 2] = B.px; segData[nE * 4 + 3] = B.py;
-        segMeta[nE * 2] = C.lineWidth * (1 - dSize * (1 - depth)) * dprScale;
-        segMeta[nE * 2 + 1] = C.lineOpacity * (1 - fade * (1 - depth));
-        nE++;
-      }
-      let nD = 0;
-      for (const i of order) {
-        const n = nodes[i];
-        dotData[nD * 4] = n.px; dotData[nD * 4 + 1] = n.py;
-        dotData[nD * 4 + 2] = C.nodeSize * (1 - dSize * (1 - n.depth)) * n.s * dprScale;
-        dotData[nD * 4 + 3] = 1 - fade * (1 - n.depth);
-        nD++;
-      }
-
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-      gl.useProgram(wProgLine);
-      gl.uniform2f(WU(wProgLine, 'uRes'), canvas.width, canvas.height);
-      gl.uniform3f(WU(wProgLine, 'uColor'), ...wHex(C.lineColor));
-      gl.bindVertexArray(wVaoLine);
-      gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData.subarray(0, nE * 4));
-      gl.bindBuffer(gl.ARRAY_BUFFER, segMetaBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, segMeta.subarray(0, nE * 2));
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nE);
-
-      gl.useProgram(wProgDot);
-      gl.uniform2f(WU(wProgDot, 'uRes'), canvas.width, canvas.height);
-      gl.uniform3f(WU(wProgDot, 'uColor'), ...wHex(C.nodeColor));
-      gl.uniform1f(WU(wProgDot, 'uShape'), Math.round(C.nodeShape));
-      gl.bindVertexArray(wVaoDot);
-      gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData.subarray(0, nD * 4));
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nD);
-      gl.bindVertexArray(null);
     },
   };
 }
@@ -1939,6 +1954,11 @@ function createEffect(canvas, C) {
 const EFFECTS = {
   orb: {
     name: 'orb',
+    deps: {
+      nodeColor: c => c.showNodes,
+      nodeMin: c => c.showNodes,
+      nodeMax: c => c.showNodes,
+    },
     hint: 'sweep your cursor through the spikes — they steer away',
     openGroups: ['Structure', 'Gradient rings', 'Spikes'],
     bgKey: 'ring4',
@@ -2013,6 +2033,12 @@ const EFFECTS = {
 
   lava: {
     name: 'lava',
+    deps: {
+      color5: c => c.bandCount >= 5,
+      color6: c => c.bandCount >= 6,
+      color7: c => c.bandCount >= 7,
+      color8: c => c.bandCount >= 8,
+    },
     hint: 'move your cursor into the lava — it tears apart',
     openGroups: ['Blobs', 'Color steps'],
     bgKey: 'bg',
@@ -2077,6 +2103,18 @@ const EFFECTS = {
 
   pixels: {
     name: 'pixels',
+    deps: {
+      imageFocus: c => c.imageOn,
+      bg: c => !c.imageOn,
+      pixelScale: c => c.imageOn, sizeMix: c => c.imageOn,
+      maxPixel: c => c.imageOn, minPixel: c => c.imageOn,
+      spotRadius: c => c.imageOn, coreSize: c => c.imageOn, spotPixel: c => c.imageOn,
+      edgeBlur: c => c.imageOn, edgeSoftness: c => c.imageOn, rimJitter: c => c.imageOn,
+      blinkSpeed: c => c.imageOn,
+      blinkDensity: c => c.imageOn && c.blinkSpeed > 0,
+      blinkBand: c => c.imageOn && c.blinkSpeed > 0,
+      wanderSpeed: c => c.wander,
+    },
     hint: 'the spotlight follows your cursor · upload your own image',
     openGroups: ['Image', 'Mosaic', 'Spotlight'],
     bgKey: 'bg',
@@ -2129,6 +2167,33 @@ const EFFECTS = {
 
   aura: {
     name: 'aura',
+    deps: {
+      blobColor2: c => c.paletteCount >= 2,
+      blobColor3: c => c.paletteCount >= 3,
+      blobColor4: c => c.paletteCount >= 4,
+      blobColor5: c => c.paletteCount >= 5,
+      blobColor6: c => c.paletteCount >= 6,
+      webCount: c => c.webOn,
+      webRadius: c => c.webOn,
+      webIrregularity: c => c.webOn,
+      linksPerNode: c => c.webOn,
+      nodeShape: c => c.webOn,
+      nodeSize: c => c.webOn,
+      nodeColor: c => c.webOn,
+      lineWidth: c => c.webOn,
+      lineOpacity: c => c.webOn,
+      lineColor: c => c.webOn,
+      perspective: c => c.webOn,
+      depthFade: c => c.webOn,
+      depthShrink: c => c.webOn,
+      snapStiffness: c => c.webOn,
+      snapDamping: c => c.webOn,
+      webStiffness: c => c.webOn,
+      autoSpin: c => c.webOn,
+      autoTilt: c => c.webOn,
+      dragSwing: c => c.webOn,
+      swingDelay: c => c.webOn,
+    },
     hint: 'drag a web node to pull it · drag empty space to rotate',
     openGroups: ['Blobs', 'Blob colors'],
     bgKey: 'bg1',
@@ -2141,6 +2206,7 @@ const EFFECTS = {
       colorDrift: 0.05, driftSpeed: 0.25,
       bg1: '#ffffff', bg2: '#e6e1f4', irregularity: 0.8, grainScale: 100,
       speed: 0.12,
+      webOn: true,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
       nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
       lineWidth: 1, lineOpacity: 0.65, lineColor: '#2a00ff',
@@ -2179,13 +2245,14 @@ const EFFECTS = {
         ['bounce speed', 'speed', 0, 1, 0.005],
       ]],
       ['Web structure', [
+        ['web visible', 'webOn', 'check'],
         ['node count', 'webCount', 20, 400, 1, 'rebuild'],
         ['web radius', 'webRadius', 0.2, 1, 0.01, 'rebuild'],
         ['web irregularity', 'webIrregularity', 0, 1, 0.01, 'rebuild'],
         ['links per node', 'linksPerNode', 1, 6, 1, 'rebuild'],
       ]],
       ['Web nodes', [
-        ['node shape · 0=● 1=■ 2=◆ 3=○', 'nodeShape', 0, 3, 1],
+        ['node shape', 'nodeShape', 'seg', ['●', '■', '◆', '○']],
         ['node size', 'nodeSize', 1, 16, 0.5],
         ['node color', 'nodeColor', 'color'],
       ]],
@@ -2218,6 +2285,70 @@ const EFFECTS = {
   },
   cup: {
     name: 'cup',
+    deps: {
+      blobCount: c => c.lavaOn,
+      blobSize: c => c.lavaOn,
+      fillLevel: c => c.lavaOn,
+      bubbleCount: c => c.lavaOn,
+      bandCount: c => c.lavaOn,
+      steps: c => c.lavaOn,
+      softness: c => c.lavaOn,
+      tightness: c => c.lavaOn,
+      glow: c => c.lavaOn,
+      ringOpacity: c => c.lavaOn,
+      opacityStep: c => c.lavaOn,
+      coreSize: c => c.lavaOn,
+      coreStart: c => c.lavaOn,
+      speed: c => c.lavaOn,
+      rise: c => c.lavaOn,
+      warpAmount: c => c.lavaOn,
+      warpScale: c => c.lavaOn,
+      cursorPull: c => c.lavaOn,
+      cursorRadius: c => c.lavaOn,
+      shatter: c => c.lavaOn,
+      stiffness: c => c.lavaOn,
+      damping: c => c.lavaOn,
+      color1: c => c.lavaOn,
+      color2: c => c.lavaOn,
+      color3: c => c.lavaOn,
+      color4: c => c.lavaOn,
+      color5: c => c.lavaOn && c.bandCount >= 5,
+      color6: c => c.lavaOn && c.bandCount >= 6,
+      color7: c => c.lavaOn && c.bandCount >= 7,
+      color8: c => c.lavaOn && c.bandCount >= 8,
+      bubbleSize: c => c.lavaOn && c.bubbleCount > 0,
+      bubbleRate: c => c.lavaOn && c.bubbleCount > 0,
+      bubbleSpeed: c => c.lavaOn && c.bubbleCount > 0,
+      layerColor: c => c.layerOn,
+      layerOpacity: c => c.layerOn,
+      layerReach: c => c.layerOn,
+      imageFocus: c => c.imageOn,
+      imageFade: c => c.imageOn,
+      imageFadeReach: c => c.imageOn && c.imageFade > 0,
+      imageFadeTop: c => c.imageOn && c.imageFade > 0,
+      bg: c => !c.imageOn || c.imageFade > 0,
+      bg2: c => !c.imageOn || c.imageFade > 0,
+      webCount: c => c.webOn,
+      webRadius: c => c.webOn,
+      webIrregularity: c => c.webOn,
+      linksPerNode: c => c.webOn,
+      nodeShape: c => c.webOn,
+      nodeSize: c => c.webOn,
+      nodeColor: c => c.webOn,
+      lineWidth: c => c.webOn,
+      lineOpacity: c => c.webOn,
+      lineColor: c => c.webOn,
+      perspective: c => c.webOn,
+      depthFade: c => c.webOn,
+      depthShrink: c => c.webOn,
+      snapStiffness: c => c.webOn,
+      snapDamping: c => c.webOn,
+      webStiffness: c => c.webOn,
+      autoSpin: c => c.webOn,
+      autoTilt: c => c.webOn,
+      dragSwing: c => c.webOn,
+      swingDelay: c => c.webOn,
+    },
     hint: 'stir the lava with your cursor · drag the web · watch the bubbles',
     openGroups: ['Blobs', 'Fill', 'Layer', 'Background'],
     bgKey: 'bg',
@@ -2239,6 +2370,7 @@ const EFFECTS = {
       layerOn: false, layerColor: '#2a00ff', layerOpacity: 0.35, layerReach: 0.6,
       imageOn: true, imageFocus: 0.3,
       imageFade: 0, imageFadeReach: 0.5, imageFadeTop: false,
+      webOn: true,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
       nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
       lineWidth: 1, lineOpacity: 0.65, lineColor: '#2a00ff',
@@ -2310,13 +2442,14 @@ const EFFECTS = {
         ['spring damping', 'damping', 0.5, 30, 0.25],
       ]],
       ['Web structure', [
+        ['web visible', 'webOn', 'check'],
         ['node count', 'webCount', 20, 400, 1, 'rebuild'],
         ['web radius', 'webRadius', 0.2, 1, 0.01, 'rebuild'],
         ['web irregularity', 'webIrregularity', 0, 1, 0.01, 'rebuild'],
         ['links per node', 'linksPerNode', 1, 6, 1, 'rebuild'],
       ]],
       ['Web nodes', [
-        ['node shape · 0=● 1=■ 2=◆ 3=○', 'nodeShape', 0, 3, 1],
+        ['node shape', 'nodeShape', 'seg', ['●', '■', '◆', '○']],
         ['node size', 'nodeSize', 1, 16, 0.5],
         ['node color', 'nodeColor', 'color'],
       ]],
@@ -2406,6 +2539,7 @@ function setShader(id) {
     }
   }
   buildPanel(EFFECTS[id].GROUPS);
+  applyDeps();
   document.querySelectorAll('#tabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.shader === id));
   refreshCodeDrawer();
@@ -2463,13 +2597,16 @@ function buildPanel(GROUPS) {
           `<input type="file" data-key="${key}" accept="image/*,video/*" hidden aria-label="${label}">`;
       } else if (a === 'check') {
         input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
+      } else if (a === 'seg') {
+        input = `<div class="segRow" data-key="${key}" role="radiogroup" aria-label="${label}">` +
+          b.map((g, i) => `<button type="button" data-val="${i}" class="${Math.round(C[key]) === i ? 'on' : ''}" aria-label="${label} ${i}">${g}</button>`).join('') + `</div>`;
       } else {
         input = `<input type="range" data-key="${key}" min="${a}" max="${b}" step="${step}" value="${C[key]}" aria-label="${label}" ${mode === 'rebuild' ? 'data-rebuild=1' : ''}>`;
         out = `<output>${C[key]}</output>`;
       }
       row.innerHTML = `<label title="${key}">${label}</label>${input}${out}`;
       det.appendChild(row);
-      inputs[key] = row.querySelector('input');
+      inputs[key] = row.querySelector('input, .segRow');
     }
     groupsEl.appendChild(det);
   }
@@ -2494,15 +2631,34 @@ groupsEl.addEventListener('input', e => {
   C[key] = el.type === 'checkbox' ? el.checked : el.type === 'color' ? el.value : parseFloat(el.value);
   if (el.type === 'range') el.parentElement.querySelector('output').textContent = el.value;
   if (el.dataset.rebuild) effect.rebuild();
+  applyDeps();
 });
+function applyDeps() {
+  const deps = EFFECTS[activeId] && EFFECTS[activeId].deps;
+  if (!deps) return;
+  for (const [key, pred] of Object.entries(deps)) {
+    const el = inputs[key];
+    if (!el) continue;
+    const on = !!pred(C);
+    const row = el.closest('.ctl');
+    if (row) row.classList.toggle('inactive', !on);
+    if ('disabled' in el) el.disabled = !on;
+  }
+}
 function syncPanel() {
   for (const [key, el] of Object.entries(inputs)) {
-    if (el.type === 'file') continue;
+    if (!el || el.type === 'file') continue;
+    if (el.classList && el.classList.contains('segRow')) {
+      el.querySelectorAll('button').forEach(x =>
+        x.classList.toggle('on', +x.dataset.val === Math.round(C[key])));
+      continue;
+    }
     if (el.type === 'checkbox') el.checked = C[key];
     else el.value = C[key];
     const out = el.parentElement.querySelector('output');
     if (out) out.textContent = C[key];
   }
+  applyDeps();
 }
 document.querySelectorAll('#tabs button').forEach(b =>
   b.addEventListener('click', () => { setShader(b.dataset.shader); noteChange(); }));
@@ -2676,6 +2832,15 @@ for (const bid of ['reset', 'reseed']) {
 
 // ============================================================ EDITABLE NUMBERS
 groupsEl.addEventListener('click', e => {
+  const sb = e.target.closest('.segRow button');
+  if (sb) {
+    const key = sb.parentElement.dataset.key;
+    C[key] = parseFloat(sb.dataset.val);
+    sb.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === sb));
+    applyDeps();
+    noteChange();
+    return;
+  }
   const fb = e.target.closest('.fileBtn');
   if (fb) {
     const fi = fb.parentElement.querySelector('input[type=file]');
@@ -2701,6 +2866,7 @@ groupsEl.addEventListener('click', e => {
     range.value = cl;
     out.textContent = cl;
     if (range.dataset.rebuild) effect.rebuild();
+    applyDeps();
     noteChange();
   };
   out.onblur = () => done(true);
