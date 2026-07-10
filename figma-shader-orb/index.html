@@ -6,8 +6,9 @@
 <title>Orb Studio — shader debug &amp; customization</title>
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500&display=swap" rel="stylesheet">
 <style>
-  :root { --line: #e4e4e4; --dim: #8a8a8a; }
+  :root { --line: #e4e4e4; --dim: #6a6a6a; }
   * { box-sizing: border-box; }
+  :focus-visible { outline: 2px solid #111; outline-offset: 1px; }
   html, body { margin: 0; height: 100%; background: #ffffff; }
   body { display: flex; font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; }
   #stage { flex: 1; display: grid; place-items: center; min-width: 0; position: relative; }
@@ -44,13 +45,23 @@
 
   /* ---- universal text tools, outside the panel ---- */
   #textTools {
-    position: absolute; top: 14px; left: 14px; z-index: 5;
-    display: flex; flex-direction: column; gap: 6px; width: 220px;
+    align-self: flex-start; margin-bottom: -14px;
+    position: relative; z-index: 5;
+    display: flex; gap: 6px;
     font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  }
+  #textEditor {
+    position: absolute; top: calc(100% + 6px); left: 0; width: 250px;
+  }
+  #canvasHint {
+    align-self: flex-start; margin-top: -18px;
+    font: 0.6875rem/1.5 ui-monospace, "JetBrains Mono", Menlo, monospace;
+    color: #6a6a6a; letter-spacing: 0.02em;
+    transition: opacity 0.6s ease;
   }
   #textChips { display: flex; gap: 6px; }
   #textChips button {
-    font: inherit; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 7px 10px; background: #fff; color: #111; border: 1px solid #111;
     cursor: pointer;
   }
@@ -62,7 +73,7 @@
   }
   #textEditor[hidden], #textChips button[hidden] { display: none !important; }
   #textEditor input, #textEditor textarea {
-    font: inherit; font-size: 11px; padding: 6px 8px;
+    font: inherit; font-size: 0.6875rem; padding: 6px 8px;
     border: 1px solid var(--line); background: #fff; color: #111; resize: vertical;
   }
 
@@ -74,34 +85,43 @@
   }
   #codeBar { display: flex; align-items: center; gap: 8px; padding: 6px 14px; }
   #codeBar button {
-    font: inherit; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 6px 10px; background: #fff; color: #111; border: 1px solid #111; cursor: pointer;
   }
   #codeBar button#codeApply { background: #111; color: #fff; }
-  #codeLabel { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #111; }
+  #codeLabel { font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase; color: #111; }
   #codeStatus {
-    flex: 1; font-size: 10px; color: var(--dim);
+    flex: 1; font-size: 0.6875rem; color: var(--dim);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
   }
   #codeArea {
     display: block; width: 100%; height: 38vh; box-sizing: border-box;
     border: 0; border-top: 1px solid var(--line); padding: 10px 14px;
-    font: 11px/1.55 ui-monospace, "JetBrains Mono", Menlo, monospace;
+    font: 0.6875rem/1.55 ui-monospace, "JetBrains Mono", Menlo, monospace;
     color: #111; background: #fafafa; resize: none; outline: none;
     white-space: pre; overflow: auto; tab-size: 2;
   }
   #codeDrawer.collapsed #codeArea { display: none; }
 
+  /* ---- teaching presets ---- */
+  #presetRow { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+  #presetRow span { font-size: 0.6875rem; color: #6a6a6a; letter-spacing: 0.05em; }
+  #presetRow button {
+    flex: 1; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 5px 6px; background: #fff; color: #111; border: 1px dashed #999; cursor: pointer;
+  }
+  #presetRow button:hover { border-style: solid; border-color: #111; }
+
   /* ---- undo / redo ---- */
   #histRow { display: flex; gap: 6px; margin-top: 8px; }
   #histRow button {
-    flex: 1; font: inherit; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    flex: 1; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 6px; background: #fff; color: #111; border: 1px solid #111; cursor: pointer;
   }
   #histRow button:disabled { opacity: 0.25; cursor: default; }
 
   /* ---- editable number readouts ---- */
-  .ctl output { cursor: text; border-bottom: 1px dotted transparent; }
+  .ctl output { cursor: text; border-bottom: 1px dotted transparent; transition: border-color 0.15s; }
   .ctl output:hover { border-bottom-color: #111; }
   .ctl output[contenteditable] { outline: 1px solid #111; background: #fafafa; }
 
@@ -109,57 +129,71 @@
   #panel {
     width: 300px; height: 100vh; overflow-y: auto; flex-shrink: 0;
     border-left: 1px solid var(--line); padding: 0 0 40px;
-    font-size: 11px; color: #111; background: #fff;
+    font-size: 0.71875rem; color: #111; background: #fff;
   }
   #panel header {
     position: sticky; top: 0; background: #fff; z-index: 2;
     padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
   }
-  #panel header h1 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; }
+  #panel header h1 { margin: 0 0 8px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.09em; }
   #tabs { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid #111; margin-bottom: 8px; }
   #tabs button {
-    flex: 1 0 25%; font: inherit; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    flex: 1 1 0; font: inherit; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 7px 4px; background: #fff; color: #111; border: none; cursor: pointer;
   }
   #tabs button.active { background: #111; color: #fff; }
   #fps { color: var(--dim); }
   details { border-bottom: 1px solid var(--line); }
+  details { padding-bottom: 7px; }
   summary {
-    padding: 10px 16px; cursor: pointer; font-weight: 600;
-    letter-spacing: 0.05em; text-transform: uppercase; font-size: 10px;
+    padding: 13px 16px 7px; cursor: pointer; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.6875rem;
     color: #111; user-select: none; list-style: none;
   }
   summary::before { content: "▸ "; color: var(--dim); }
   details[open] summary::before { content: "▾ "; }
-  .ctl { display: grid; grid-template-columns: 92px 1fr 44px; gap: 8px; align-items: center; padding: 3px 16px; }
-  .ctl label { color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ctl output { text-align: right; color: #111; font-variant-numeric: tabular-nums; }
+  .ctl {
+    display: grid; grid-template-columns: 1fr 52px;
+    gap: 3px 10px; align-items: center; padding: 7px 16px 6px;
+  }
+  .ctl label { grid-column: 1 / -1; color: #3d3d3d; white-space: normal; }
+  .ctl input[type=color] { grid-column: 1 / -1; }
+  .ctl .fileBtn {
+    grid-column: 1 / -1; font: inherit; font-size: 0.6875rem;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 6px 8px; background: #fff; color: #111;
+    border: 1px solid var(--line); cursor: pointer; text-align: left;
+  }
+  .ctl .fileBtn:hover { border-color: #111; }
+  .ctl output { text-align: right; color: #111; font-weight: 700; font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; height: 18px; accent-color: #111; }
   input[type=color] { width: 100%; height: 20px; padding: 0; border: 1px solid var(--line); background: none; }
   input[type=checkbox] { accent-color: #111; justify-self: start; }
   .row { display: flex; gap: 8px; padding: 10px 16px; }
   button.act {
-    flex: 1; font: inherit; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    flex: 1; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 9px 6px; background: #111; color: #fff; border: none; cursor: pointer;
   }
   button.ghost { background: #fff; color: #111; border: 1px solid #111; }
+  button.act:hover { opacity: 0.86; }
+  #tabs button:hover:not(.active) { background: #f2f2f2; }
   button:active { opacity: 0.7; }
 </style>
 </head>
 <body>
 <div id="stage">
-  <div id="textTools">
-    <div id="textChips">
-      <button id="textToggle">text: off</button>
-      <button id="textEdit" hidden>edit ▾</button>
-    </div>
-    <div id="textEditor" hidden>
-      <input id="editTitle" placeholder="title">
-      <textarea id="editBody" rows="3" placeholder="body copy"></textarea>
-      <input id="editBtn" placeholder="button label">
-    </div>
-  </div>
   <div id="stack">
+    <div id="textTools">
+      <div id="textChips">
+        <button id="textToggle">text: off</button>
+        <button id="textEdit" hidden>edit ▾</button>
+      </div>
+      <div id="textEditor" hidden>
+        <input id="editTitle" placeholder="title">
+        <textarea id="editBody" rows="3" placeholder="body copy"></textarea>
+        <input id="editBtn" placeholder="button label">
+      </div>
+    </div>
     <div id="overlay" hidden>
       <h1 id="ovTitle"></h1>
       <p id="ovBody"></p>
@@ -168,6 +202,7 @@
     <div id="canvasWrap">
       <canvas id="c"></canvas>
     </div>
+    <div id="canvasHint" hidden></div>
   </div>
 </div>
 <aside id="panel">
@@ -180,11 +215,17 @@
       <button data-shader="aura">aura</button>
       <button data-shader="cup">cup</button>
     </div>
+    <div id="presetRow">
+      <span>try</span>
+      <button data-preset="0" title="Pixels: a wide spotlight de-pixelating an image">lens</button>
+      <button data-preset="1" title="Lava: heavy cursor shatter and glow">tear</button>
+      <button data-preset="2" title="Cup: busy bubbles and a scrim layer">pour</button>
+    </div>
     <div id="histRow">
       <button id="undoBtn" disabled>↶ undo</button>
       <button id="redoBtn" disabled>↷ redo</button>
     </div>
-    <div id="fps">— fps</div>
+    <div id="fps"></div>
   </header>
   <div id="groups"></div>
   <div class="row">
@@ -197,8 +238,8 @@
     <button class="act ghost" id="reseed">randomize seed</button>
   </div>
   <div class="row">
-    <button class="act" id="save">save settings</button>
-    <button class="act ghost" id="clear-save">clear saved</button>
+    <button class="act ghost" id="save" title="Saves all shader settings, the hero text, and code edits — restored whenever this page opens">save settings</button>
+    <button class="act ghost" id="clear-save" title="Forgets the saved state — next load starts from factory defaults">clear saved</button>
   </div>
 </aside>
 
@@ -1898,6 +1939,8 @@ function createEffect(canvas, C) {
 const EFFECTS = {
   orb: {
     name: 'orb',
+    hint: 'sweep your cursor through the spikes — they steer away',
+    openGroups: ['Structure', 'Gradient rings', 'Spikes'],
     bgKey: 'ring4',
     DEFAULTS: {
       count: 250, seed: 0, circleRadius: 0.90,
@@ -1920,10 +1963,10 @@ const EFFECTS = {
         ['circle radius', 'circleRadius', 0.3, 1.0, 0.01],
       ]],
       ['Gradient rings', [
-        ['color · ring 1', 'ring1', 'color'],
-        ['color · ring 2', 'ring2', 'color'],
-        ['color · ring 3', 'ring3', 'color'],
-        ['color · ring 4', 'ring4', 'color'],
+        ['ring 1 color (center)', 'ring1', 'color'],
+        ['ring 2 color', 'ring2', 'color'],
+        ['ring 3 color', 'ring3', 'color'],
+        ['ring 4 color (outer)', 'ring4', 'color'],
         ['ring 1 ends at', 'ringEnd1', 0.02, 0.9, 0.01],
         ['ring 2 ends at', 'ringEnd2', 0.05, 0.95, 0.01],
         ['ring 3 ends at', 'ringEnd3', 0.1, 1.0, 0.01],
@@ -1970,6 +2013,8 @@ const EFFECTS = {
 
   lava: {
     name: 'lava',
+    hint: 'move your cursor into the lava — it tears apart',
+    openGroups: ['Blobs', 'Color steps'],
     bgKey: 'bg',
     DEFAULTS: {
       blobCount: 6, seed: 0, blobSize: 0.30,
@@ -2032,6 +2077,8 @@ const EFFECTS = {
 
   pixels: {
     name: 'pixels',
+    hint: 'the spotlight follows your cursor · upload your own image',
+    openGroups: ['Image', 'Mosaic', 'Spotlight'],
     bgKey: 'bg',
     assets: ['asset-pixelbg'],
     fileAssets: { imageUpload: 'asset-pixelbg' },
@@ -2082,6 +2129,8 @@ const EFFECTS = {
 
   aura: {
     name: 'aura',
+    hint: 'drag a web node to pull it · drag empty space to rotate',
+    openGroups: ['Blobs', 'Blob colors'],
     bgKey: 'bg1',
     DEFAULTS: {
       count: 7, seed: 0, size: 0.34, sizeVariation: 0.45,
@@ -2109,20 +2158,20 @@ const EFFECTS = {
         ['edge softness', 'edgeSoftness', 0.2, 3, 0.05],
         ['opacity', 'opacity', 0.1, 1, 0.01],
       ]],
-      ['Blob colours', [
+      ['Blob colors', [
         ['palette count', 'paletteCount', 1, 6, 1],
-        ['colour 1', 'blobColor1', 'color'],
-        ['colour 2', 'blobColor2', 'color'],
-        ['colour 3', 'blobColor3', 'color'],
-        ['colour 4', 'blobColor4', 'color'],
-        ['colour 5', 'blobColor5', 'color'],
-        ['colour 6', 'blobColor6', 'color'],
-        ['colour drift', 'colorDrift', 0, 0.2, 0.005],
+        ['color 1', 'blobColor1', 'color'],
+        ['color 2', 'blobColor2', 'color'],
+        ['color 3', 'blobColor3', 'color'],
+        ['color 4', 'blobColor4', 'color'],
+        ['color 5', 'blobColor5', 'color'],
+        ['color 6', 'blobColor6', 'color'],
+        ['color drift', 'colorDrift', 0, 0.2, 0.005],
         ['drift speed', 'driftSpeed', 0, 2, 0.01],
       ]],
       ['Background', [
-        ['colour 1', 'bg1', 'color'],
-        ['colour 2', 'bg2', 'color'],
+        ['color 1', 'bg1', 'color'],
+        ['color 2', 'bg2', 'color'],
         ['irregularity', 'irregularity', 0, 2, 0.02],
         ['grain scale', 'grainScale', 0.3, 150, 0.5],
       ]],
@@ -2136,14 +2185,14 @@ const EFFECTS = {
         ['links per node', 'linksPerNode', 1, 6, 1, 'rebuild'],
       ]],
       ['Web nodes', [
-        ['shape 0● 1■ 2◆ 3○', 'nodeShape', 0, 3, 1],
+        ['node shape · 0=● 1=■ 2=◆ 3=○', 'nodeShape', 0, 3, 1],
         ['node size', 'nodeSize', 1, 16, 0.5],
-        ['node colour', 'nodeColor', 'color'],
+        ['node color', 'nodeColor', 'color'],
       ]],
       ['Web lines', [
         ['line thickness', 'lineWidth', 0.2, 5, 0.1],
         ['line opacity', 'lineOpacity', 0.05, 1, 0.01],
-        ['line colour', 'lineColor', 'color'],
+        ['line color', 'lineColor', 'color'],
       ]],
       ['Web depth', [
         ['perspective', 'perspective', 1.2, 5, 0.05],
@@ -2169,6 +2218,8 @@ const EFFECTS = {
   },
   cup: {
     name: 'cup',
+    hint: 'stir the lava with your cursor · drag the web · watch the bubbles',
+    openGroups: ['Blobs', 'Fill', 'Layer', 'Background'],
     bgKey: 'bg',
     frame: { aspect: '4 / 3', radius: '0' },
     assets: ['asset-cupbg'],
@@ -2212,7 +2263,7 @@ const EFFECTS = {
       ]],
       ['Layer', [
         ['layer', 'layerOn', 'check'],
-        ['layer colour', 'layerColor', 'color'],
+        ['layer color', 'layerColor', 'color'],
         ['layer opacity', 'layerOpacity', 0, 1, 0.01],
         ['layer reach', 'layerReach', 0.05, 1, 0.01],
       ]],
@@ -2226,7 +2277,7 @@ const EFFECTS = {
         ['background top', 'bg', 'color'],
         ['background bottom', 'bg2', 'color'],
       ]],
-      ['Colour steps', [
+      ['Color steps', [
         ['band count', 'bandCount', 2, 8, 1],
         ['band 1 (outer)', 'color1', 'color'],
         ['band 2', 'color2', 'color'],
@@ -2265,14 +2316,14 @@ const EFFECTS = {
         ['links per node', 'linksPerNode', 1, 6, 1, 'rebuild'],
       ]],
       ['Web nodes', [
-        ['shape 0● 1■ 2◆ 3○', 'nodeShape', 0, 3, 1],
+        ['node shape · 0=● 1=■ 2=◆ 3=○', 'nodeShape', 0, 3, 1],
         ['node size', 'nodeSize', 1, 16, 0.5],
-        ['node colour', 'nodeColor', 'color'],
+        ['node color', 'nodeColor', 'color'],
       ]],
       ['Web lines', [
         ['line thickness', 'lineWidth', 0.2, 5, 0.1],
         ['line opacity', 'lineOpacity', 0.05, 1, 0.01],
-        ['line colour', 'lineColor', 'color'],
+        ['line color', 'lineColor', 'color'],
       ]],
       ['Web depth', [
         ['perspective', 'perspective', 1.2, 5, 0.05],
@@ -2307,6 +2358,7 @@ let activeId = null, effect = null, C = null;
 let mouse = [99, 99];
 
 function attachPointer(cv) {
+  cv.addEventListener('pointerdown', dismissHints, { once: true });
   cv.addEventListener('pointermove', ev => {
     const r = cv.getBoundingClientRect();
     mouse = [((ev.clientX - r.left) / r.width - 0.5) * 2, (0.5 - (ev.clientY - r.top) / r.height) * 2];
@@ -2358,6 +2410,27 @@ function setShader(id) {
     b.classList.toggle('active', b.dataset.shader === id));
   refreshCodeDrawer();
   if (codeErr) setCodeStatus(codeErr);
+  showHint(id);
+}
+
+// first-touch hints: teach the invisible canvas interactions, once
+const HINT_KEY = 'shader-studio-hints-v1';
+let hintsDone = false;
+try { hintsDone = !!localStorage.getItem(HINT_KEY); } catch (e) {}
+function showHint(id) {
+  const h = document.getElementById('canvasHint');
+  if (hintsDone || !EFFECTS[id].hint) { h.hidden = true; return; }
+  h.textContent = EFFECTS[id].hint;
+  h.hidden = false;
+  h.style.opacity = '1';
+}
+function dismissHints() {
+  if (hintsDone) return;
+  hintsDone = true;
+  try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
+  const h = document.getElementById('canvasHint');
+  h.style.opacity = '0';
+  setTimeout(() => { h.hidden = true; }, 700);
 }
 
 function resizeActive() {
@@ -2375,20 +2448,23 @@ function buildPanel(GROUPS) {
   inputs = {};
   for (const [title, items] of GROUPS) {
     const det = document.createElement('details');
-    det.open = true;
+    // essentials open by default; advanced groups start collapsed
+    const og = EFFECTS[activeId] && EFFECTS[activeId].openGroups;
+    det.open = !og || og.includes(title);
     det.innerHTML = `<summary>${title}</summary>`;
     for (const [label, key, a, b, step, mode] of items) {
       const row = document.createElement('div');
       row.className = 'ctl';
       let input, out = '';
       if (a === 'color') {
-        input = `<input type="color" data-key="${key}" value="${C[key]}">`;
+        input = `<input type="color" data-key="${key}" value="${C[key]}" aria-label="${label}">`;
       } else if (a === 'file') {
-        input = `<input type="file" data-key="${key}" accept="image/*,video/*">`;
+        input = `<button type="button" class="fileBtn">choose file…</button>` +
+          `<input type="file" data-key="${key}" accept="image/*,video/*" hidden aria-label="${label}">`;
       } else if (a === 'check') {
-        input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''}>`;
+        input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
       } else {
-        input = `<input type="range" data-key="${key}" min="${a}" max="${b}" step="${step}" value="${C[key]}" ${mode === 'rebuild' ? 'data-rebuild=1' : ''}>`;
+        input = `<input type="range" data-key="${key}" min="${a}" max="${b}" step="${step}" value="${C[key]}" aria-label="${label}" ${mode === 'rebuild' ? 'data-rebuild=1' : ''}>`;
         out = `<output>${C[key]}</output>`;
       }
       row.innerHTML = `<label title="${key}">${label}</label>${input}${out}`;
@@ -2430,6 +2506,22 @@ function syncPanel() {
 }
 document.querySelectorAll('#tabs button').forEach(b =>
   b.addEventListener('click', () => { setShader(b.dataset.shader); noteChange(); }));
+
+// teaching presets: one click to a tuned look — shows what the sliders can do
+const PRESETS = [
+  { shader: 'pixels', set: { spotRadius: 0.55, edgeBlur: 4, pixelScale: 96, coreSize: 0.5 } },
+  { shader: 'lava', set: { shatter: 1.6, cursorPull: -2, glow: 0.65, tightness: 2.2 } },
+  { shader: 'cup', set: { bubbleCount: 7, bubbleRate: 2.2, bubbleSpeed: 1.1, layerOn: true, layerOpacity: 0.3 } },
+];
+document.querySelectorAll('#presetRow button').forEach(b =>
+  b.addEventListener('click', () => {
+    const p = PRESETS[+b.dataset.preset];
+    setShader(p.shader);
+    Object.assign(C, p.set);
+    syncPanel();
+    effect.rebuild();
+    noteChange();
+  }));
 document.getElementById('reset').onclick = () => {
   configs[activeId] = { ...EFFECTS[activeId].DEFAULTS };
   setShader(activeId);
@@ -2584,6 +2676,12 @@ for (const bid of ['reset', 'reseed']) {
 
 // ============================================================ EDITABLE NUMBERS
 groupsEl.addEventListener('click', e => {
+  const fb = e.target.closest('.fileBtn');
+  if (fb) {
+    const fi = fb.parentElement.querySelector('input[type=file]');
+    if (fi) fi.click();
+    return;
+  }
   const out = e.target.closest('output');
   if (!out || out.isContentEditable) return;
   const range = out.parentElement.querySelector('input[type="range"]');
@@ -2654,7 +2752,7 @@ function flash(btn, text) {
 }
 document.getElementById('save').onclick = e => {
   saveState();
-  flash(e.target, 'saved ✓');
+  flash(e.target, 'all saved ✓');
 };
 document.getElementById('clear-save').onclick = e => {
   try {
@@ -2776,6 +2874,10 @@ requestAnimationFrame(loop);
 const params = new URLSearchParams(location.search);
 // restore last saved settings (if any); an explicit ?shader= wins over the save
 const savedShader = loadState();
+// respect prefers-reduced-motion: start paused; the pause toggle re-enables
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  for (const id in configs) configs[id].paused = true;
+}
 restoreText();                                   // auto-saved text wins over the snapshot
 if (params.has('text')) overlayState.on = params.get('text') === 'on';
 applyOverlay();
