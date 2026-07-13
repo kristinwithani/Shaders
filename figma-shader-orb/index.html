@@ -103,6 +103,29 @@
   }
   #codeDrawer.collapsed #codeArea { display: none; }
 
+  /* ---- help card ---- */
+  #helpCard {
+    position: fixed; right: 316px; top: 16px; z-index: 30; width: 320px;
+    background: #fff; border: 1px solid #111; padding: 18px 20px;
+    box-shadow: 0 16px 40px rgba(17, 17, 17, 0.14);
+    font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+    font-size: 0.71875rem; line-height: 1.55; color: #111;
+  }
+  #helpCard[hidden] { display: none !important; }
+  #helpCard h2 { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; }
+  #helpCard p { margin: 0 0 12px; color: #3d3d3d; }
+  #helpCard dl { margin: 0 0 14px; }
+  #helpCard dt {
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 0.6875rem; margin-top: 10px;
+  }
+  #helpCard dd { margin: 2px 0 0; color: #3d3d3d; }
+  #helpCard button {
+    font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 6px 10px; background: #fff; color: #111; border: 1px solid #111; cursor: pointer;
+  }
+  #helpCard button:hover { background: #111; color: #fff; }
+
   /* ---- undo / redo ---- */
   #histRow { display: flex; gap: 6px; }
   #histRow button {
@@ -126,7 +149,16 @@
     position: sticky; top: 0; background: #fff; z-index: 2;
     padding: 16px 16px 12px; border-bottom: 1px solid var(--line);
   }
-  #panel header h1 { margin: 0 0 12px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.09em; }
+  #panel header h1 {
+    margin: 0 0 12px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.09em;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #helpBtn {
+    font: inherit; font-size: 0.6875rem; width: 20px; height: 20px;
+    background: #fff; color: #111; border: 1px solid #111; border-radius: 50%;
+    cursor: pointer; line-height: 1;
+  }
+  #helpBtn:hover { background: #111; color: #fff; }
   #tabs { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid #111; margin-bottom: 6px; }
   #tabs button {
     flex: 1 1 0; font: inherit; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
@@ -221,7 +253,7 @@
 </div>
 <aside id="panel">
   <header>
-    <h1>SHADER STUDIO</h1>
+    <h1>SHADER STUDIO <button id="helpBtn" title="what is this? (press ?)" aria-label="Help">?</button></h1>
     <div id="tabs">
       <button data-shader="orb" class="active">orb</button>
       <button data-shader="lava">lava</button>
@@ -253,6 +285,20 @@
     <button class="act ghost" id="clear-save" title="Forgets the saved state — next load starts from factory defaults">clear saved</button>
   </div>
 </aside>
+
+<div id="helpCard" hidden>
+  <h2>SHADER STUDIO</h2>
+  <p>Five interactive WebGL shaders for website backgrounds. Pick a tab,
+  play with the canvas, tune the layers on the right — then export.</p>
+  <dl>
+    <dt>canvas</dt><dd>every shader reacts to your cursor — sweep, drag, stir. On aura &amp; cup, drag web nodes or empty space to rotate in 3D.</dd>
+    <dt>panel</dt><dd>sections are the shader's layers, in render order. Header checkboxes toggle a whole layer. Click any number to type an exact value; sliders nudge with ← → when focused.</dd>
+    <dt>export</dt><dd><b>html</b> — a standalone file of the current shader for your site · <b>preset</b> — settings as JSON · <b>mp4</b> — 10-second capture (interactions included) · <b>png</b> — current frame.</dd>
+    <dt>saving</dt><dd>save settings keeps everything (all shaders, hero text, code edits) in this browser across reloads. Undo is unlimited: <b>⌘Z / ⇧⌘Z</b>.</dd>
+    <dt>code</dt><dd>the bottom drawer shows the live engine source — edit, apply, copy. Broken edits revert themselves.</dd>
+  </dl>
+  <button id="helpClose">close · esc</button>
+</div>
 
 <div id="codeDrawer" class="collapsed">
   <div id="codeBar">
@@ -2640,7 +2686,9 @@ function buildPanel(GROUPS) {
     if (a === 'color') {
       input = `<input type="color" data-key="${key}" value="${C[key]}" aria-label="${label}">`;
     } else if (a === 'file') {
-      input = `<button type="button" class="fileBtn">choose file…</button>` +
+      const assetId = (EFFECTS[activeId].fileAssets || {})[key];
+      const fname = assetId && customAssets[assetId + ':name'];
+      input = `<button type="button" class="fileBtn">${fname || 'choose file…'}</button>` +
         `<input type="file" data-key="${key}" accept="image/*,video/*" hidden aria-label="${label}">`;
     } else if (a === 'check') {
       input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
@@ -2690,9 +2738,12 @@ groupsEl.addEventListener('input', e => {
     const assetId = (EFFECTS[activeId].fileAssets || {})[key];
     if (!f || !assetId) return;
     const rd = new FileReader();
+    const btn = el.parentElement.querySelector('.fileBtn');
     rd.onload = () => {
       document.getElementById(assetId).textContent = rd.result;
       customAssets[assetId] = rd.result;
+      if (btn) btn.textContent = f.name;         // show what's loaded
+      customAssets[assetId + ':name'] = f.name;
       setShader(activeId);                       // reload engine with the new image/video
     };
     rd.readAsDataURL(f);
@@ -2930,6 +2981,24 @@ groupsEl.addEventListener('click', e => {
     else if (ev.key === 'Escape') { done(false); }
   };
 });
+
+// ============================================================ HELP CARD
+const HELP_KEY = 'shader-studio-help-v1';
+function toggleHelp(force) {
+  const card = $('helpCard');
+  card.hidden = force !== undefined ? !force : !card.hidden;
+  if (!card.hidden) { try { localStorage.setItem(HELP_KEY, '1'); } catch (e) {} }
+}
+$('helpBtn').onclick = () => toggleHelp();
+$('helpClose').onclick = () => toggleHelp(false);
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  if (e.key === 'Escape') toggleHelp(false);
+  else if (e.key === '?' && !typing) toggleHelp();
+});
+// first visit: open once so cold visitors get oriented; never again after
+try { if (!localStorage.getItem(HELP_KEY)) toggleHelp(true); } catch (e) {}
 
 // ============================================================ PERSISTENCE
 const STORE_KEY = 'shader-studio-v1';
