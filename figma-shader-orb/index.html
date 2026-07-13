@@ -326,6 +326,23 @@ function createEffect(canvas, C) {
   precision highp float;
   uniform vec2 uRes; uniform float uCircleR, uE1, uE2, uE3, uSoft;
   uniform vec3 uC1, uC2, uC3, uC4;
+  uniform float uImgOn, uImgAspect, uCanvasA, uImgRot, uImgZoom, uImgX, uImgY, uImgFlip, uImgAlpha;
+  uniform sampler2D uImg;
+  vec3 bgSample(vec2 fuv, vec3 fb) {
+    if (uImgOn < 0.5) return fb;
+    vec2 q = fuv - 0.5;
+    q.x *= uCanvasA;
+    if (uImgFlip > 0.5) q.x = -q.x;
+    float cr = cos(uImgRot), sr = sin(uImgRot);
+    q = mat2(cr, sr, -sr, cr) * q;
+    q /= max(uImgZoom, 0.05);
+    q.x /= uCanvasA;
+    vec2 uv = q + 0.5 - vec2(uImgX, uImgY);
+    if (uImgAspect > uCanvasA) { uv.x = 0.5 + (uv.x - 0.5) * (uCanvasA / uImgAspect); }
+    else { uv.y = 0.5 + (uv.y - 0.5) * (uImgAspect / uCanvasA); }
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return fb;
+    return mix(fb, texture(uImg, vec2(uv.x, 1.0 - uv.y)).rgb, uImgAlpha);
+  }
   out vec4 o;
   void main(){
     vec2 p=(gl_FragCoord.xy-0.5*uRes)/(0.5*min(uRes.x,uRes.y));
@@ -333,7 +350,7 @@ function createEffect(canvas, C) {
     vec3 col=uC1;
     col=mix(col,uC2,smoothstep(uE1-s,uE1+s,r));
     col=mix(col,uC3,smoothstep(uE2-s,uE2+s,r));
-    col=mix(col,uC4,smoothstep(uE3-s,uE3+s,r));
+    col=mix(col,bgSample(gl_FragCoord.xy/uRes,uC4),smoothstep(uE3-s,uE3+s,r));
     o=vec4(col,1.0);
   }`;
   const VS_SPIKE = `#version 300 es
@@ -505,6 +522,18 @@ function createEffect(canvas, C) {
     gl.uniform3f(U(progRings, 'uC2'), ...hex(C.ring2));
     gl.uniform3f(U(progRings, 'uC3'), ...hex(C.ring3));
     gl.uniform3f(U(progRings, 'uC4'), ...hex(C.ring4));
+    gl.uniform1f(U(progRings, 'uImgOn'), C.imageOn && imgTex ? 1 : 0);
+    gl.uniform1f(U(progRings, 'uImgAspect'), imgAspect);
+    gl.uniform1f(U(progRings, 'uCanvasA'), canvas.width / Math.max(canvas.height, 1));
+    gl.uniform1f(U(progRings, 'uImgRot'), C.imageRotate * Math.PI / 180);
+    gl.uniform1f(U(progRings, 'uImgZoom'), C.imageZoom);
+    gl.uniform1f(U(progRings, 'uImgX'), C.imageX);
+    gl.uniform1f(U(progRings, 'uImgY'), C.imageY);
+    gl.uniform1f(U(progRings, 'uImgFlip'), C.imageFlip ? 1 : 0);
+    gl.uniform1f(U(progRings, 'uImgAlpha'), C.imageOpacity);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, imgTex);
+    gl.uniform1i(U(progRings, 'uImg'), 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -530,6 +559,24 @@ function createEffect(canvas, C) {
   }
 
   rebuild();
+
+  // optional background image (uploaded asset)
+  let imgTex = null, imgAspect = 1;
+  const bgAsset = document.getElementById('asset-orbbg');
+  if (bgAsset && bgAsset.textContent.trim()) {
+    const img = new Image();
+    img.onload = () => {
+      imgAspect = img.width / img.height;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    };
+    img.src = bgAsset.textContent.trim();
+  }
   return {
     rebuild,
     frame(dt, mouse) {
@@ -560,6 +607,23 @@ function createEffect(canvas, C) {
   uniform float uSteps, uSoft, uWarpAmt, uWarpScale, uCore, uCoreStart;
   uniform float uTight, uGlow, uShatter, uRingA, uRingStep;
   uniform vec3 uBg, uBg2;
+  uniform float uImgOn, uImgAspect, uCanvasA, uImgRot, uImgZoom, uImgX, uImgY, uImgFlip, uImgAlpha;
+  uniform sampler2D uImg;
+  vec3 bgSample(vec2 fuv, vec3 fb) {
+    if (uImgOn < 0.5) return fb;
+    vec2 q = fuv - 0.5;
+    q.x *= uCanvasA;
+    if (uImgFlip > 0.5) q.x = -q.x;
+    float cr = cos(uImgRot), sr = sin(uImgRot);
+    q = mat2(cr, sr, -sr, cr) * q;
+    q /= max(uImgZoom, 0.05);
+    q.x /= uCanvasA;
+    vec2 uv = q + 0.5 - vec2(uImgX, uImgY);
+    if (uImgAspect > uCanvasA) { uv.x = 0.5 + (uv.x - 0.5) * (uCanvasA / uImgAspect); }
+    else { uv.y = 0.5 + (uv.y - 0.5) * (uImgAspect / uCanvasA); }
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return fb;
+    return mix(fb, texture(uImg, vec2(uv.x, 1.0 - uv.y)).rgb, uImgAlpha);
+  }
   uniform vec3 uCols[8]; uniform int uNCols;
   out vec4 o;
   float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
@@ -616,6 +680,7 @@ function createEffect(canvas, C) {
     band += glow * (band * 0.5 + vec3(0.6));
     // soft gradient background
     vec3 bg = mix(uBg2, uBg, smoothstep(-1.1, 1.1, p.y));
+    bg = bgSample(gl_FragCoord.xy / uRes, bg);
     // per-ring opacity: the outermost ring renders at uRingA, and every
     // ring inward gains uRingStep opacity (50% -> 43% -> 36% transparent...)
     float ring = max(floor(x) - floor(0.28 * uSteps), 0.0);
@@ -655,6 +720,24 @@ function createEffect(canvas, C) {
     }
   }
   rebuild();
+
+  // optional background image (uploaded asset)
+  let imgTex = null, imgAspect = 1;
+  const bgAsset = document.getElementById('asset-lavabg');
+  if (bgAsset && bgAsset.textContent.trim()) {
+    const img = new Image();
+    img.onload = () => {
+      imgAspect = img.width / img.height;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    };
+    img.src = bgAsset.textContent.trim();
+  }
 
   let simT = 0, mEase = [99, 99];
   return {
@@ -716,6 +799,18 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uRingStep'), C.opacityStep);
       gl.uniform3f(U('uBg'), ...hex(C.bg));
       gl.uniform3f(U('uBg2'), ...hex(C.bg2));
+      gl.uniform1f(U('uImgOn'), C.imageOn && imgTex ? 1 : 0);
+      gl.uniform1f(U('uImgAspect'), imgAspect);
+      gl.uniform1f(U('uCanvasA'), canvas.width / Math.max(canvas.height, 1));
+      gl.uniform1f(U('uImgRot'), C.imageRotate * Math.PI / 180);
+      gl.uniform1f(U('uImgZoom'), C.imageZoom);
+      gl.uniform1f(U('uImgX'), C.imageX);
+      gl.uniform1f(U('uImgY'), C.imageY);
+      gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
+      gl.uniform1f(U('uImgAlpha'), C.imageOpacity);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.uniform1i(U('uImg'), 0);
       const nB = Math.min(Math.max(Math.round(C.bandCount), 2), 8);
       for (let i = 0; i < 8; i++) {
         gl.uniform3f(U('uCols[' + i + ']'), ...hex(C['color' + (Math.min(i, nB - 1) + 1)]));
@@ -741,6 +836,7 @@ function createEffect(canvas, C) {
   precision highp float;
   uniform vec2 uRes, uCursor;             // cursor in unit coords
   uniform float uOn, uImgOn, uImgAspect, uFocus;
+  uniform float uImgRot, uImgZoom, uImgX, uImgY, uImgFlip;
   uniform float uUnits, uMix, uMaxPx, uMinPx, uSpotR, uCoreFrac, uBlurMax, uSoft;
   uniform float uSeed, uBlinkDen, uBlinkBand, uSpotPx, uJitter;
   uniform sampler2D uImg;
@@ -753,6 +849,12 @@ function createEffect(canvas, C) {
     return fract(sin(dot(p, vec2(269.5, 183.3))) * 43758.5453123);
   }
   vec2 coverUV(vec2 uv) {                 // uv top-down; cover-crop to square
+    vec2 tq = uv - 0.5;
+    if (uImgFlip > 0.5) tq.x = -tq.x;
+    float cr = cos(uImgRot), sr = sin(uImgRot);
+    tq = mat2(cr, -sr, sr, cr) * tq;
+    tq /= max(uImgZoom, 0.05);
+    uv = tq + 0.5 + vec2(uImgX, -uImgY);
     if (uImgAspect < 1.0) {
       float a = uImgAspect;
       uv.y = mix(0.0, 1.0 - a, uFocus) + uv.y * a;
@@ -760,7 +862,7 @@ function createEffect(canvas, C) {
       float a = 1.0 / uImgAspect;
       uv.x = (1.0 - a) * 0.5 + uv.x * a;
     }
-    return uv;
+    return clamp(uv, 0.0, 1.0);
   }
   void main() {
     vec2 uv = gl_FragCoord.xy / uRes;
@@ -901,6 +1003,11 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgOn'), C.imageOn && imgTex ? 1 : 0);
       gl.uniform1f(U('uImgAspect'), imgAspect);
       gl.uniform1f(U('uFocus'), C.imageFocus);
+      gl.uniform1f(U('uImgRot'), C.imageRotate * Math.PI / 180);
+      gl.uniform1f(U('uImgZoom'), C.imageZoom);
+      gl.uniform1f(U('uImgX'), C.imageX);
+      gl.uniform1f(U('uImgY'), C.imageY);
+      gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
       gl.uniform1f(U('uUnits'), Math.max(Math.round(C.pixelScale), 16));
       gl.uniform1f(U('uMix'), C.sizeMix);
       const maxPx = Math.max(Math.round(C.maxPixel), 1);
@@ -937,6 +1044,9 @@ function createEffect(canvas, C) {
 
 <!-- optional background image for the cup shader (empty until uploaded) -->
 <script id="asset-cupbg" type="text/plain"></script>
+<script id="asset-orbbg" type="text/plain"></script>
+<script id="asset-lavabg" type="text/plain"></script>
+<script id="asset-aurabg" type="text/plain"></script>
 
 
 
@@ -959,6 +1069,23 @@ function createEffect(canvas, C) {
   uniform vec3 uBlobCols[12];
   uniform int uNB;
   uniform vec3 uBg1, uBg2;
+  uniform float uImgOn, uImgAspect, uCanvasA, uImgRot, uImgZoom, uImgX, uImgY, uImgFlip, uImgAlpha;
+  uniform sampler2D uImg;
+  vec3 bgSample(vec2 fuv, vec3 fb) {
+    if (uImgOn < 0.5) return fb;
+    vec2 q = fuv - 0.5;
+    q.x *= uCanvasA;
+    if (uImgFlip > 0.5) q.x = -q.x;
+    float cr = cos(uImgRot), sr = sin(uImgRot);
+    q = mat2(cr, sr, -sr, cr) * q;
+    q /= max(uImgZoom, 0.05);
+    q.x /= uCanvasA;
+    vec2 uv = q + 0.5 - vec2(uImgX, uImgY);
+    if (uImgAspect > uCanvasA) { uv.x = 0.5 + (uv.x - 0.5) * (uCanvasA / uImgAspect); }
+    else { uv.y = 0.5 + (uv.y - 0.5) * (uImgAspect / uCanvasA); }
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return fb;
+    return mix(fb, texture(uImg, vec2(uv.x, 1.0 - uv.y)).rgb, uImgAlpha);
+  }
   out vec4 o;
   float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
   float vnoise(vec2 p) {
@@ -979,6 +1106,7 @@ function createEffect(canvas, C) {
                   fbm(p * uNScale + 7.31 - uTime * 0.012));
     float g = fbm(p * uNScale * 0.7 + (w - 0.5) * uWarp * 3.0);
     vec3 col = mix(uBg1, uBg2, smoothstep(0.22, 0.78, g));
+    col = bgSample(gl_FragCoord.xy / uRes, col);
     // blurred blobs: gaussian falloff, edges melt into the background
     for (int i = 0; i < 12; i++) {
       if (i >= uNB) break;
@@ -1033,6 +1161,24 @@ function createEffect(canvas, C) {
     }
   }
   rebuildAura();
+
+  // optional background image (uploaded asset)
+  let imgTex = null, imgAspect = 1;
+  const bgAsset = document.getElementById('asset-aurabg');
+  if (bgAsset && bgAsset.textContent.trim()) {
+    const img = new Image();
+    img.onload = () => {
+      imgAspect = img.width / img.height;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    };
+    img.src = bgAsset.textContent.trim();
+  }
 
   const posData = new Float32Array(12 * 4);
   const colData = new Float32Array(12 * 3);
@@ -1271,6 +1417,18 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uNScale'), C.grainScale);
       gl.uniform3f(U('uBg1'), ...hex(C.bg1));
       gl.uniform3f(U('uBg2'), ...hex(C.bg2));
+      gl.uniform1f(U('uImgOn'), C.imageOn && imgTex ? 1 : 0);
+      gl.uniform1f(U('uImgAspect'), imgAspect);
+      gl.uniform1f(U('uCanvasA'), canvas.width / Math.max(canvas.height, 1));
+      gl.uniform1f(U('uImgRot'), C.imageRotate * Math.PI / 180);
+      gl.uniform1f(U('uImgZoom'), C.imageZoom);
+      gl.uniform1f(U('uImgX'), C.imageX);
+      gl.uniform1f(U('uImgY'), C.imageY);
+      gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
+      gl.uniform1f(U('uImgAlpha'), C.imageOpacity);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.uniform1i(U('uImg'), 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // ---- web overlay on top ----
       if (C.webOn) {
@@ -1409,6 +1567,7 @@ function createEffect(canvas, C) {
   uniform float uLayerOn, uLayerOpacity, uLayerReach;
   uniform float uImgOn, uImgAspect, uCanvasA, uFocus;
   uniform float uImgFade, uImgFadeReach, uImgFadeTop;
+  uniform float uImgRot, uImgZoom, uImgX, uImgY, uImgFlip, uImgAlpha;
   uniform sampler2D uImg;
   uniform vec3 uCols[8]; uniform int uNCols;
   out vec4 o;
@@ -1489,11 +1648,21 @@ function createEffect(canvas, C) {
     vec3 bg = mix(uBg2, uBg, smoothstep(-1.1, 1.1, p.y));
     if (uImgOn > 0.5) {
       vec2 uvS = gl_FragCoord.xy / uRes;
-      vec3 img = texture(uImg, coverUV(vec2(uvS.x, 1.0 - uvS.y))).rgb;
-      float tEdge = (p.y + 1.0) * 0.5;
-      if (uImgFadeTop < 0.5) tEdge = 1.0 - tEdge;   // default: fade toward the bottom
-      float a = 1.0 - uImgFade * smoothstep(1.0 - uImgFadeReach, 1.0, tEdge);
-      bg = mix(bg, img, a);
+      vec2 q = uvS - 0.5;
+      q.x *= uCanvasA;
+      if (uImgFlip > 0.5) q.x = -q.x;
+      float crr = cos(uImgRot), srr = sin(uImgRot);
+      q = mat2(crr, srr, -srr, crr) * q;
+      q /= max(uImgZoom, 0.05);
+      q.x /= uCanvasA;
+      uvS = q + 0.5 - vec2(uImgX, uImgY);
+      if (uvS.x >= 0.0 && uvS.x <= 1.0 && uvS.y >= 0.0 && uvS.y <= 1.0) {
+        vec3 img = texture(uImg, coverUV(vec2(uvS.x, 1.0 - uvS.y))).rgb;
+        float tEdge = (p.y + 1.0) * 0.5;
+        if (uImgFadeTop < 0.5) tEdge = 1.0 - tEdge; // default: fade toward the bottom
+        float a = 1.0 - uImgFade * smoothstep(1.0 - uImgFadeReach, 1.0, tEdge);
+        bg = mix(bg, img, a * uImgAlpha);
+      }
     }
     // toggleable scrim: a colour wash rising from the bottom
     if (uLayerOn > 0.5) {
@@ -1865,6 +2034,12 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgFade'), C.imageFade);
       gl.uniform1f(U('uImgFadeReach'), C.imageFadeReach);
       gl.uniform1f(U('uImgFadeTop'), C.imageFadeTop ? 1 : 0);
+      gl.uniform1f(U('uImgRot'), C.imageRotate * Math.PI / 180);
+      gl.uniform1f(U('uImgZoom'), C.imageZoom);
+      gl.uniform1f(U('uImgX'), C.imageX);
+      gl.uniform1f(U('uImgY'), C.imageY);
+      gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
+      gl.uniform1f(U('uImgAlpha'), C.imageOpacity);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.uniform1i(U('uImg'), 0);
@@ -2000,14 +2175,23 @@ function createEffect(canvas, C) {
 const EFFECTS = {
   orb: {
     name: 'orb',
+    assets: ['asset-orbbg'],
+    fileAssets: { imageUpload: 'asset-orbbg' },
     deps: {
       nodeColor: c => c.showNodes,
       nodeMin: c => c.showNodes,
       nodeMax: c => c.showNodes,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageX: c => c.imageOn,
+      imageY: c => c.imageOn,
+      imageFlip: c => c.imageOn,
+      imageOpacity: c => c.imageOn,
     },
     hint: 'sweep your cursor through the spikes — they steer away',
     openGroups: ['Structure', 'Gradient rings', 'Spikes'],
     LAYOUT: [
+      { t: 'background', toggle: 'imageOn', groups: ['Background image'] },
       { t: 'orb', groups: ['Structure', 'Gradient rings', 'Spikes', 'End nodes'],
         rename: { 'Structure': 'structure', 'Gradient rings': 'gradient rings', 'Spikes': 'spikes', 'End nodes': 'end nodes' } },
       { t: 'motion', groups: ['Idle motion'] },
@@ -2017,6 +2201,7 @@ const EFFECTS = {
     bgKey: 'ring4',
     DEFAULTS: {
       count: 250, seed: 0, circleRadius: 0.90,
+      imageOn: true, imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       ring1: '#f9b85f', ring2: '#d9ccb0', ring3: '#b6d9ff', ring4: '#ffffff',
       ringEnd1: 0.25, ringEnd2: 0.35, ringEnd3: 0.58, blendSoft: 0.14,
       spikeColor: '#2a00ff', lenMin: 0.16, lenMax: 0.42,
@@ -2030,6 +2215,16 @@ const EFFECTS = {
       dprCap: 2, paused: false,
     },
     GROUPS: [
+      ['Background image', [
+        ['upload image', 'imageUpload', 'file'],
+        ['show image', 'imageOn', 'check'],
+        ['rotate image (°)', 'imageRotate', -180, 180, 1],
+        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
+        ['crop · position x', 'imageX', -1, 1, 0.01],
+        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['flip horizontal', 'imageFlip', 'check'],
+        ['image opacity', 'imageOpacity', 0, 1, 0.01],
+      ]],
       ['Structure', [
         ['particle count', 'count', 10, 800, 1, 'rebuild'],
         ['seed', 'seed', 0, 999, 1, 'rebuild'],
@@ -2086,15 +2281,24 @@ const EFFECTS = {
 
   lava: {
     name: 'lava',
+    assets: ['asset-lavabg'],
+    fileAssets: { imageUpload: 'asset-lavabg' },
     deps: {
       color5: c => c.bandCount >= 5,
       color6: c => c.bandCount >= 6,
       color7: c => c.bandCount >= 7,
       color8: c => c.bandCount >= 8,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageX: c => c.imageOn,
+      imageY: c => c.imageOn,
+      imageFlip: c => c.imageOn,
+      imageOpacity: c => c.imageOn,
     },
     hint: 'move your cursor into the lava — it tears apart',
     openGroups: ['Blobs', 'Color steps'],
     LAYOUT: [
+      { t: 'background', toggle: 'imageOn', groups: ['Background image'] },
       { t: 'lava', groups: ['Blobs', 'Color steps', 'Motion', 'Cursor physics'],
         rename: { 'Blobs': 'blobs', 'Color steps': 'color steps', 'Motion': 'motion', 'Cursor physics': 'cursor' } },
       { t: 'general', groups: ['Performance'] },
@@ -2102,6 +2306,7 @@ const EFFECTS = {
     bgKey: 'bg',
     DEFAULTS: {
       blobCount: 6, seed: 0, blobSize: 0.30,
+      imageOn: true, imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       bg: '#ffffff', bg2: '#dbe4ff',
       bandCount: 4,
       color1: '#b6d9ff', color2: '#d9ccb0', color3: '#f9b85f', color4: '#ff6b35',
@@ -2113,6 +2318,16 @@ const EFFECTS = {
       dprCap: 2, paused: false,
     },
     GROUPS: [
+      ['Background image', [
+        ['upload image', 'imageUpload', 'file'],
+        ['show image', 'imageOn', 'check'],
+        ['rotate image (°)', 'imageRotate', -180, 180, 1],
+        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
+        ['crop · position x', 'imageX', -1, 1, 0.01],
+        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['flip horizontal', 'imageFlip', 'check'],
+        ['image opacity', 'imageOpacity', 0, 1, 0.01],
+      ]],
       ['Blobs', [
         ['blob count', 'blobCount', 2, 16, 1, 'rebuild'],
         ['seed', 'seed', 0, 999, 1, 'rebuild'],
@@ -2172,6 +2387,11 @@ const EFFECTS = {
       blinkDensity: c => c.imageOn && c.blinkSpeed > 0,
       blinkBand: c => c.imageOn && c.blinkSpeed > 0,
       wanderSpeed: c => c.wander,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageX: c => c.imageOn,
+      imageY: c => c.imageOn,
+      imageFlip: c => c.imageOn,
     },
     hint: 'the spotlight follows your cursor · upload your own image',
     openGroups: ['Image / video', 'Mosaic', 'Spotlight'],
@@ -2186,6 +2406,7 @@ const EFFECTS = {
     fileAssets: { imageUpload: 'asset-pixelbg' },
     DEFAULTS: {
       imageOn: true, imageFocus: 0.1, bg: '#ffffff',
+      imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false,
       pixelScale: 128, sizeMix: 0.55, maxPixel: 4, minPixel: 1,
       spotRadius: 0.38, coreSize: 0.35, edgeBlur: 3, edgeSoftness: 0.3,
       blinkSpeed: 8, blinkDensity: 0.35, blinkBand: 0.22,
@@ -2198,6 +2419,11 @@ const EFFECTS = {
         ['upload media', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
         ['crop focus', 'imageFocus', 0, 1, 0.01],
+        ['rotate image (°)', 'imageRotate', -180, 180, 1],
+        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
+        ['crop · position x', 'imageX', -1, 1, 0.01],
+        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['flip horizontal', 'imageFlip', 'check'],
         ['background', 'bg', 'color'],
       ]],
       ['Mosaic', [
@@ -2231,12 +2457,20 @@ const EFFECTS = {
 
   aura: {
     name: 'aura',
+    assets: ['asset-aurabg'],
+    fileAssets: { imageUpload: 'asset-aurabg' },
     deps: {
       blobColor2: c => c.paletteCount >= 2,
       blobColor3: c => c.paletteCount >= 3,
       blobColor4: c => c.paletteCount >= 4,
       blobColor5: c => c.paletteCount >= 5,
       blobColor6: c => c.paletteCount >= 6,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageX: c => c.imageOn,
+      imageY: c => c.imageOn,
+      imageFlip: c => c.imageOn,
+      imageOpacity: c => c.imageOn,
       webCount: c => c.webOn,
       webRadius: c => c.webOn,
       webIrregularity: c => c.webOn,
@@ -2263,7 +2497,8 @@ const EFFECTS = {
     LAYOUT: [
       { t: 'blobs', groups: ['Blobs', 'Blob colors', 'Motion'],
         rename: { 'Blobs': 'shape', 'Blob colors': 'colors', 'Motion': 'motion' } },
-      { t: 'background', groups: ['Background'] },
+      { t: 'background', groups: ['Background image', 'Background'],
+        rename: { 'Background image': 'image', 'Background': 'colors' } },
       { t: 'web', toggle: 'webOn', groups: ['Web structure', 'Web nodes', 'Web lines', 'Web depth', 'Web physics', 'Web motion'],
         rename: { 'Web structure': 'structure', 'Web nodes': 'nodes', 'Web lines': 'lines', 'Web depth': 'depth', 'Web physics': 'physics', 'Web motion': 'motion' } },
       { t: 'general', groups: ['Performance'] },
@@ -2271,6 +2506,7 @@ const EFFECTS = {
     bgKey: 'bg1',
     DEFAULTS: {
       count: 7, seed: 0, size: 0.34, sizeVariation: 0.45,
+      imageOn: true, imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       edgeSoftness: 1.3, opacity: 0.85,
       paletteCount: 5,
       blobColor1: '#f9b85f', blobColor2: '#b6d9ff', blobColor3: '#ffd9ec',
@@ -2306,6 +2542,16 @@ const EFFECTS = {
         ['color 6', 'blobColor6', 'color'],
         ['color drift', 'colorDrift', 0, 0.2, 0.005],
         ['drift speed', 'driftSpeed', 0, 2, 0.01],
+      ]],
+      ['Background image', [
+        ['upload image', 'imageUpload', 'file'],
+        ['show image', 'imageOn', 'check'],
+        ['rotate image (°)', 'imageRotate', -180, 180, 1],
+        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
+        ['crop · position x', 'imageX', -1, 1, 0.01],
+        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['flip horizontal', 'imageFlip', 'check'],
+        ['image opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
       ['Background', [
         ['color 1', 'bg1', 'color'],
@@ -2395,6 +2641,12 @@ const EFFECTS = {
       layerOpacity: c => c.layerOn,
       layerReach: c => c.layerOn,
       imageFocus: c => c.imageOn,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageX: c => c.imageOn,
+      imageY: c => c.imageOn,
+      imageFlip: c => c.imageOn,
+      imageOpacity: c => c.imageOn,
       imageFade: c => c.imageOn,
       imageFadeReach: c => c.imageOn && c.imageFade > 0,
       imageFadeTop: c => c.imageOn && c.imageFade > 0,
@@ -2450,6 +2702,7 @@ const EFFECTS = {
       fillLevel: 0, bubbleCount: 4, bubbleSize: 1, bubbleRate: 1, bubbleSpeed: 0.7,
       layerOn: false, layerColor: '#2a00ff', layerOpacity: 0.35, layerReach: 0.6,
       imageOn: true, imageFocus: 0.3,
+      imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       imageFade: 0, imageFadeReach: 0.5, imageFadeTop: false,
       webOn: true,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
@@ -2484,6 +2737,12 @@ const EFFECTS = {
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
         ['crop focus', 'imageFocus', 0, 1, 0.01],
+        ['rotate image (°)', 'imageRotate', -180, 180, 1],
+        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
+        ['crop · position x', 'imageX', -1, 1, 0.01],
+        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['flip horizontal', 'imageFlip', 'check'],
+        ['image opacity', 'imageOpacity', 0, 1, 0.01],
         ['image fade', 'imageFade', 0, 1, 0.01],
         ['fade reach', 'imageFadeReach', 0.05, 1, 0.01],
         ['fade from top', 'imageFadeTop', 'check'],
