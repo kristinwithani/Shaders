@@ -2206,6 +2206,7 @@ const EFFECTS = {
       nodeColor: c => c.showNodes,
       nodeMin: c => c.showNodes,
       nodeMax: c => c.showNodes,
+      imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
       imageX: c => c.imageOn,
@@ -2311,6 +2312,7 @@ const EFFECTS = {
       color6: c => c.bandCount >= 6,
       color7: c => c.bandCount >= 7,
       color8: c => c.bandCount >= 8,
+      imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
       imageX: c => c.imageOn,
@@ -2407,6 +2409,7 @@ const EFFECTS = {
       blinkDensity: c => c.imageOn && c.blinkSpeed > 0,
       blinkBand: c => c.imageOn && c.blinkSpeed > 0,
       wanderSpeed: c => c.wander,
+      imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
       imageX: c => c.imageOn,
@@ -2482,6 +2485,7 @@ const EFFECTS = {
       blobColor4: c => c.paletteCount >= 4,
       blobColor5: c => c.paletteCount >= 5,
       blobColor6: c => c.paletteCount >= 6,
+      imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
       imageX: c => c.imageOn,
@@ -2655,6 +2659,7 @@ const EFFECTS = {
       layerColor: c => c.layerOn,
       layerOpacity: c => c.layerOn,
       layerReach: c => c.layerOn,
+      imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
       imageX: c => c.imageOn,
@@ -3142,7 +3147,7 @@ function drawCrop() {
   ctx.strokeStyle = '#111';
   ctx.stroke();
 }
-let cropDragAt = null, cropWheelT = 0;
+let cropDragAt = null;
 function bindCropper() {
   const cv = groupsEl.querySelector('.cropCv');
   if (!cv) return;
@@ -3176,13 +3181,6 @@ function bindCropper() {
   const up = () => { if (cropDragAt) { cropDragAt = null; noteChange(); } };
   cv.addEventListener('pointerup', up);
   cv.addEventListener('pointercancel', up);
-  cv.addEventListener('wheel', e => {
-    e.preventDefault();
-    C.imageZoom = Math.min(Math.max((C.imageZoom || 1) * (e.deltaY < 0 ? 1.05 : 0.952), 0.5), 4);
-    scheduleCrop();
-    clearTimeout(cropWheelT);
-    cropWheelT = setTimeout(noteChange, 500);
-  }, { passive: false });
 }
 
 function applyDeps() {
@@ -3196,6 +3194,21 @@ function applyDeps() {
     if (row) row.classList.toggle('inactive', !on);
     if ('disabled' in el) el.disabled = !on;
   }
+  // sections and subgroups whose every control is inactive collapse on
+  // their own (and reopen when something inside comes back to life —
+  // but only if we were the ones who closed them)
+  groupsEl.querySelectorAll('details.sub, details.sec').forEach(det => {
+    const rows = det.querySelectorAll('.ctl');
+    if (!rows.length) return;
+    const allOff = [...rows].every(r => r.classList.contains('inactive'));
+    if (allOff && det.open) {
+      det.open = false;
+      det.dataset.autoc = '1';
+    } else if (!allOff && !det.open && det.dataset.autoc) {
+      det.open = true;
+      delete det.dataset.autoc;
+    }
+  });
 }
 function syncPanel() {
   for (const [key, el] of Object.entries(inputs)) {
