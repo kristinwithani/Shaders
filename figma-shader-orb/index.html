@@ -2398,7 +2398,6 @@ const EFFECTS = {
   pixels: {
     name: 'pixels',
     deps: {
-      imageFocus: c => c.imageOn,
       bg: c => !c.imageOn,
       pixelScale: c => c.imageOn, sizeMix: c => c.imageOn,
       maxPixel: c => c.imageOn, minPixel: c => c.imageOn,
@@ -2439,7 +2438,6 @@ const EFFECTS = {
       ['Image / video', [
         ['upload media', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
-        ['crop focus', 'imageFocus', 0, 1, 0.01],
         ['rotate image', 'imageRotate', 'rot'],
         ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
@@ -2657,7 +2655,6 @@ const EFFECTS = {
       layerColor: c => c.layerOn,
       layerOpacity: c => c.layerOn,
       layerReach: c => c.layerOn,
-      imageFocus: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
       imageX: c => c.imageOn,
@@ -2753,7 +2750,6 @@ const EFFECTS = {
       ['Background', [
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
-        ['crop focus', 'imageFocus', 0, 1, 0.01],
         ['rotate image', 'imageRotate', 'rot'],
         ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
@@ -3090,20 +3086,44 @@ function drawCrop() {
   const mc = document.getElementById('c');
   const A = mc.width / Math.max(mc.height, 1);
   const wS = ia > A ? A / ia : 1, hS = ia > A ? 1 : ia / A;
-  cropMeta = { dw, dh, wS, hS };
   const z = Math.max(C.imageZoom || 1, 0.05);
   const r = (C.imageRotate || 0) * Math.PI / 180;
   const cr = Math.cos(r), sr = Math.sin(r);
-  const pts = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([fx, fy]) => {
+  const uvPts = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([fx, fy]) => {
     let qx = (fx - 0.5) * A, qy = fy - 0.5;
     if (C.imageFlip) qx = -qx;
     let rx = cr * qx - sr * qy, ry = sr * qx + cr * qy;
     rx /= z; ry /= z; rx /= A;
     let u = rx + 0.5 - (C.imageX || 0), v = ry + 0.5 - (C.imageY || 0);
-    u = 0.5 + (u - 0.5) * wS;
-    v = 0.5 + (v - 0.5) * hS;
-    return [dx + u * dw, dy2 + (1 - v) * dh];
+    return [0.5 + (u - 0.5) * wS, 0.5 + (v - 0.5) * hS];
   });
+  const us = uvPts.map(p => p[0]), vs = uvPts.map(p => p[1]);
+  cropMeta = {
+    dw, dh, wS, hS, atX: C.imageX || 0, atY: C.imageY || 0,
+    minU: Math.min(...us), maxU: Math.max(...us),
+    minV: Math.min(...vs), maxV: Math.max(...vs),
+    cU: (Math.min(...us) + Math.max(...us)) / 2,
+    cV: (Math.min(...vs) + Math.max(...vs)) / 2,
+  };
+  const pts = uvPts.map(([u, v]) => [dx + u * dw, dy2 + (1 - v) * dh]);
+  // snap guides: dashed center lines when the frame is centered on an axis
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 1;
+  if (Math.abs(cropMeta.cU - 0.5) < 0.002) {
+    ctx.beginPath();
+    ctx.moveTo(dx + 0.5 * dw, dy2);
+    ctx.lineTo(dx + 0.5 * dw, dy2 + dh);
+    ctx.stroke();
+  }
+  if (Math.abs(cropMeta.cV - 0.5) < 0.002) {
+    ctx.beginPath();
+    ctx.moveTo(dx, dy2 + 0.5 * dh);
+    ctx.lineTo(dx + dw, dy2 + 0.5 * dh);
+    ctx.stroke();
+  }
+  ctx.restore();
   // dim everything outside the viewport, then stroke it
   ctx.save();
   ctx.beginPath();
@@ -3135,8 +3155,22 @@ function bindCropper() {
     const scale = cv.width / cv.getBoundingClientRect().width;
     const dpx = (e.clientX - cropDragAt[0]) * scale, dpy = (e.clientY - cropDragAt[1]) * scale;
     cropDragAt = [e.clientX, e.clientY];
-    C.imageX = Math.min(Math.max(C.imageX - (dpx / cropMeta.dw) / cropMeta.wS, -1.5), 1.5);
-    C.imageY = Math.min(Math.max(C.imageY + (dpy / cropMeta.dh) / cropMeta.hS, -1.5), 1.5);
+    let Xc = Math.min(Math.max(C.imageX - (dpx / cropMeta.dw) / cropMeta.wS, -1.5), 1.5);
+    let Yc = Math.min(Math.max(C.imageY + (dpy / cropMeta.dh) / cropMeta.hS, -1.5), 1.5);
+    // magnetic snapping: the frame clicks onto the image center and edges.
+    // uv positions shift linearly with pan, so project from the last draw.
+    const m = cropMeta, EPS = 0.015;
+    const dX = Xc - m.atX, dY = Yc - m.atY;
+    const cU = m.cU - dX * m.wS, minU = m.minU - dX * m.wS, maxU = m.maxU - dX * m.wS;
+    if (Math.abs(cU - 0.5) < EPS) Xc += (cU - 0.5) / m.wS;
+    else if (Math.abs(minU) < EPS) Xc += minU / m.wS;
+    else if (Math.abs(maxU - 1) < EPS) Xc += (maxU - 1) / m.wS;
+    const cV = m.cV - dY * m.hS, minV = m.minV - dY * m.hS, maxV = m.maxV - dY * m.hS;
+    if (Math.abs(cV - 0.5) < EPS) Yc += (cV - 0.5) / m.hS;
+    else if (Math.abs(minV) < EPS) Yc += minV / m.hS;
+    else if (Math.abs(maxV - 1) < EPS) Yc += (maxV - 1) / m.hS;
+    C.imageX = Xc;
+    C.imageY = Yc;
     scheduleCrop();
   });
   const up = () => { if (cropDragAt) { cropDragAt = null; noteChange(); } };
