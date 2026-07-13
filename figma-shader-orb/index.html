@@ -207,10 +207,35 @@
   }
   .segRow button:hover { border-color: #111; }
   .segRow button.on { background: #111; color: #fff; border-color: #111; }
+  .rotRow { grid-column: 1 / -1; display: flex; gap: 4px; align-items: center; }
+  .rotRow button {
+    font: inherit; padding: 4px 8px; background: #fff; color: #111;
+    border: 1px solid var(--line); cursor: pointer; white-space: nowrap;
+  }
+  .rotRow button:hover { border-color: #111; }
+  .rotRow input {
+    flex: 1; min-width: 0; font: inherit; text-align: right;
+    padding: 4px 6px; border: 1px solid var(--line); background: #fff; color: #111;
+  }
+  .rotRow .unit { color: var(--dim); }
+  .cropWrap { grid-column: 1 / -1; }
+  .cropCv {
+    width: 100%; display: block; border: 1px solid var(--line);
+    background: #fafafa; cursor: grab; touch-action: none;
+  }
+  .cropCv:active { cursor: grabbing; }
+  .cropBtns { display: flex; gap: 4px; margin-top: 4px; align-items: center; }
+  .cropBtns button {
+    font: inherit; padding: 3px 10px; background: #fff; color: #111;
+    border: 1px solid var(--line); cursor: pointer;
+  }
+  .cropBtns button:hover { border-color: #111; }
+  .cropZv { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
 
   /* gated controls: dimmed + disabled while their layer is off */
   .ctl.inactive { opacity: 0.35; }
-  .ctl.inactive input, .ctl.inactive .segRow button, .ctl.inactive .fileBtn { pointer-events: none; }
+  .ctl.inactive input, .ctl.inactive .segRow button, .ctl.inactive .fileBtn,
+  .ctl.inactive .rotRow button, .ctl.inactive .cropWrap { pointer-events: none; }
   .ctl output { text-align: right; color: #111; font-weight: 700; font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; height: 18px; accent-color: #111; }
   input[type=color] { width: 100%; height: 20px; padding: 0; border: 1px solid var(--line); background: none; }
@@ -2218,10 +2243,8 @@ const EFFECTS = {
       ['Background image', [
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
-        ['rotate image (°)', 'imageRotate', -180, 180, 1],
-        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
-        ['crop · position x', 'imageX', -1, 1, 0.01],
-        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['rotate image', 'imageRotate', 'rot'],
+        ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['image opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
@@ -2321,10 +2344,8 @@ const EFFECTS = {
       ['Background image', [
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
-        ['rotate image (°)', 'imageRotate', -180, 180, 1],
-        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
-        ['crop · position x', 'imageX', -1, 1, 0.01],
-        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['rotate image', 'imageRotate', 'rot'],
+        ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['image opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
@@ -2419,10 +2440,8 @@ const EFFECTS = {
         ['upload media', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
         ['crop focus', 'imageFocus', 0, 1, 0.01],
-        ['rotate image (°)', 'imageRotate', -180, 180, 1],
-        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
-        ['crop · position x', 'imageX', -1, 1, 0.01],
-        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['rotate image', 'imageRotate', 'rot'],
+        ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['background', 'bg', 'color'],
       ]],
@@ -2546,10 +2565,8 @@ const EFFECTS = {
       ['Background image', [
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
-        ['rotate image (°)', 'imageRotate', -180, 180, 1],
-        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
-        ['crop · position x', 'imageX', -1, 1, 0.01],
-        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['rotate image', 'imageRotate', 'rot'],
+        ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['image opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
@@ -2737,10 +2754,8 @@ const EFFECTS = {
         ['upload image', 'imageUpload', 'file'],
         ['show image', 'imageOn', 'check'],
         ['crop focus', 'imageFocus', 0, 1, 0.01],
-        ['rotate image (°)', 'imageRotate', -180, 180, 1],
-        ['crop · zoom', 'imageZoom', 0.5, 4, 0.01],
-        ['crop · position x', 'imageX', -1, 1, 0.01],
-        ['crop · position y', 'imageY', -1, 1, 0.01],
+        ['rotate image', 'imageRotate', 'rot'],
+        ['crop image', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['image opacity', 'imageOpacity', 0, 1, 0.01],
         ['image fade', 'imageFade', 0, 1, 0.01],
@@ -2951,6 +2966,16 @@ function buildPanel(GROUPS) {
         `<input type="file" data-key="${key}" accept="image/*,video/*" hidden aria-label="${label}">`;
     } else if (a === 'check') {
       input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
+    } else if (a === 'rot') {
+      input = `<div class="rotRow">` +
+        `<button type="button" data-rot="-90" aria-label="rotate left 90 degrees">⟲ −90</button>` +
+        `<input type="number" data-key="${key}" step="1" value="${C[key]}" aria-label="${label} in degrees">` +
+        `<span class="unit">°</span>` +
+        `<button type="button" data-rot="90" aria-label="rotate right 90 degrees">⟳ +90</button></div>`;
+    } else if (a === 'crop') {
+      input = `<div class="cropWrap"><canvas class="cropCv" width="264" height="150"></canvas>` +
+        `<div class="cropBtns"><button type="button" data-zoom="0.9">− zoom</button>` +
+        `<button type="button" data-zoom="1.111">+ zoom</button><span class="cropZv"></span></div></div>`;
     } else if (a === 'seg') {
       input = `<div class="segRow" data-key="${key}" role="radiogroup" aria-label="${label}">` +
         b.map((g, i) => `<button type="button" data-val="${i}" class="${Math.round(C[key]) === i ? 'on' : ''}" aria-label="${label} ${i}">${g}</button>`).join('') + `</div>`;
@@ -2960,7 +2985,7 @@ function buildPanel(GROUPS) {
     }
     row.innerHTML = `<label title="${key}">${label}</label>${input}${out}`;
     host.appendChild(row);
-    inputs[key] = row.querySelector('input, .segRow');
+    inputs[key] = row.querySelector('input, .segRow, .cropWrap');
   };
   for (const sec of SECTIONS) {
     const det = document.createElement('details');
@@ -2987,6 +3012,8 @@ function buildPanel(GROUPS) {
     groupsEl.appendChild(det);
     if (sec.toggle) inputs[sec.toggle] = det.querySelector('.secToggle');
   }
+  bindCropper();
+  drawCrop();
 }
 const customAssets = {};                         // uploaded images, by asset id
 groupsEl.addEventListener('input', e => {
@@ -3012,7 +3039,118 @@ groupsEl.addEventListener('input', e => {
   if (el.type === 'range') el.parentElement.querySelector('output').textContent = el.value;
   if (el.dataset.rebuild) effect.rebuild();
   applyDeps();
+  scheduleCrop();
 });
+// ---- visual cropper: preview + viewport frame sharing the shader's math ----
+const cropImgs = {};
+let cropMeta = null, cropRaf = 0;
+function scheduleCrop() {
+  if (cropRaf) return;
+  cropRaf = requestAnimationFrame(() => { cropRaf = 0; drawCrop(); });
+}
+function cropPlaceholder(ctx, cv, msg) {
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = '#8a8a8a';
+  ctx.font = '11px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(msg, cv.width / 2, cv.height / 2 + 4);
+}
+function drawCrop() {
+  const cv = groupsEl.querySelector('.cropCv');
+  if (!cv) return;
+  const zv = groupsEl.querySelector('.cropZv');
+  if (zv) zv.textContent = (C.imageZoom || 1).toFixed(2) + '×';
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const fa = EFFECTS[activeId].fileAssets;
+  const assetId = fa && Object.values(fa)[0];
+  const slot = assetId && document.getElementById(assetId);
+  const data = slot && slot.textContent.trim();
+  cropMeta = null;
+  if (!data) { cropPlaceholder(ctx, cv, 'upload an image to crop'); return; }
+  if (data.startsWith('data:video')) { cropPlaceholder(ctx, cv, 'video source — no crop preview'); return; }
+  let rec = cropImgs[assetId];
+  if (!rec || rec.src !== data) {
+    rec = cropImgs[assetId] = { src: data, img: new Image() };
+    rec.img.onload = () => scheduleCrop();
+    rec.img.src = data;
+  }
+  const img = rec.img;
+  if (!img.complete || !img.naturalWidth) { cropPlaceholder(ctx, cv, 'loading…'); return; }
+  const ia = img.naturalWidth / img.naturalHeight;
+  const cw = cv.width, ch = cv.height;
+  let dw = cw, dh = cw / ia;
+  if (dh > ch) { dh = ch; dw = ch * ia; }
+  const dx = (cw - dw) / 2, dy2 = (ch - dh) / 2;
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.drawImage(img, dx, dy2, dw, dh);
+  // viewport corners via the shader's forward transform
+  const mc = document.getElementById('c');
+  const A = mc.width / Math.max(mc.height, 1);
+  const wS = ia > A ? A / ia : 1, hS = ia > A ? 1 : ia / A;
+  cropMeta = { dw, dh, wS, hS };
+  const z = Math.max(C.imageZoom || 1, 0.05);
+  const r = (C.imageRotate || 0) * Math.PI / 180;
+  const cr = Math.cos(r), sr = Math.sin(r);
+  const pts = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([fx, fy]) => {
+    let qx = (fx - 0.5) * A, qy = fy - 0.5;
+    if (C.imageFlip) qx = -qx;
+    let rx = cr * qx - sr * qy, ry = sr * qx + cr * qy;
+    rx /= z; ry /= z; rx /= A;
+    let u = rx + 0.5 - (C.imageX || 0), v = ry + 0.5 - (C.imageY || 0);
+    u = 0.5 + (u - 0.5) * wS;
+    v = 0.5 + (v - 0.5) * hS;
+    return [dx + u * dw, dy2 + (1 - v) * dh];
+  });
+  // dim everything outside the viewport, then stroke it
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, cw, ch);
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 3; i >= 0; i--) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+  ctx.fill('evenodd');
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#111';
+  ctx.stroke();
+}
+let cropDragAt = null, cropWheelT = 0;
+function bindCropper() {
+  const cv = groupsEl.querySelector('.cropCv');
+  if (!cv) return;
+  cv.addEventListener('pointerdown', e => {
+    cropDragAt = [e.clientX, e.clientY];
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!cropDragAt || !cropMeta) return;
+    const scale = cv.width / cv.getBoundingClientRect().width;
+    const dpx = (e.clientX - cropDragAt[0]) * scale, dpy = (e.clientY - cropDragAt[1]) * scale;
+    cropDragAt = [e.clientX, e.clientY];
+    C.imageX = Math.min(Math.max(C.imageX - (dpx / cropMeta.dw) / cropMeta.wS, -1.5), 1.5);
+    C.imageY = Math.min(Math.max(C.imageY + (dpy / cropMeta.dh) / cropMeta.hS, -1.5), 1.5);
+    scheduleCrop();
+  });
+  const up = () => { if (cropDragAt) { cropDragAt = null; noteChange(); } };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    C.imageZoom = Math.min(Math.max((C.imageZoom || 1) * (e.deltaY < 0 ? 1.05 : 0.952), 0.5), 4);
+    scheduleCrop();
+    clearTimeout(cropWheelT);
+    cropWheelT = setTimeout(noteChange, 500);
+  }, { passive: false });
+}
+
 function applyDeps() {
   const deps = EFFECTS[activeId] && EFFECTS[activeId].deps;
   if (!deps) return;
@@ -3028,6 +3166,7 @@ function applyDeps() {
 function syncPanel() {
   for (const [key, el] of Object.entries(inputs)) {
     if (!el || el.type === 'file') continue;
+    if (el.classList && el.classList.contains('cropWrap')) continue;
     if (el.classList && el.classList.contains('segRow')) {
       el.querySelectorAll('button').forEach(x =>
         x.classList.toggle('on', +x.dataset.val === Math.round(C[key])));
@@ -3197,6 +3336,25 @@ for (const bid of ['reset', 'reseed']) {
 
 // ============================================================ EDITABLE NUMBERS
 groupsEl.addEventListener('click', e => {
+  const rb = e.target.closest('.rotRow button');
+  if (rb) {
+    const inp = rb.parentElement.querySelector('input');
+    const k = inp.dataset.key;
+    let v = (parseFloat(inp.value) || 0) + parseFloat(rb.dataset.rot);
+    v = ((v + 180) % 360 + 360) % 360 - 180;      // normalize to (-180, 180]
+    C[k] = v;
+    inp.value = v;
+    scheduleCrop();
+    noteChange();
+    return;
+  }
+  const zb = e.target.closest('.cropBtns button');
+  if (zb) {
+    C.imageZoom = Math.min(Math.max((C.imageZoom || 1) * parseFloat(zb.dataset.zoom), 0.5), 4);
+    scheduleCrop();
+    noteChange();
+    return;
+  }
   const sb = e.target.closest('.segRow button');
   if (sb) {
     const key = sb.parentElement.dataset.key;
