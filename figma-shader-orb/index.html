@@ -11,19 +11,23 @@
   :focus-visible { outline: 2px solid #111; outline-offset: 1px; }
   html, body { margin: 0; height: 100%; background: #ffffff; }
   body { display: flex; font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; }
-  #stage { flex: 1; display: grid; place-items: center; min-width: 0; position: relative; }
+  /* the stage is a size container so the preview scales with the space that is
+     actually free (window minus panel), not the raw viewport */
+  #stage { flex: 1; display: grid; place-items: center; min-width: 0; position: relative; container-type: size; }
   #stack { display: flex; flex-direction: column; align-items: center; gap: 30px; }
   #canvasWrap {
-    position: relative; width: min(88vmin, 760px); aspect-ratio: 1;
+    position: relative; aspect-ratio: 1;
+    width: min(88vmin, 760px);   /* fallback for browsers without cq units */
+    width: 88cqmin;
     border-radius: 999px 999px 40px 40px;   /* arch: pill top, 40px bottom */
     overflow: hidden;
   }
-  #stack.textOn #canvasWrap { width: min(60vmin, 560px); }
+  #stack.textOn #canvasWrap { width: min(60vmin, 560px); width: 60cqmin; }
   canvas#c { width: 100%; height: 100%; display: block; cursor: crosshair; }
 
   /* ---- hero text, sits right above the shader (Satoshi) ---- */
   #overlay {
-    width: min(60vmin, 560px); color: #111;
+    width: min(60vmin, 560px); width: 60cqmin; color: #111;
     font-family: 'Satoshi', -apple-system, 'Helvetica Neue', sans-serif;
     text-align: left;
   }
@@ -214,9 +218,13 @@
   }
   .rotRow button:hover { border-color: #111; }
   .rotRow input {
-    flex: 1; min-width: 0; font: inherit; text-align: right;
+    width: 52px; font: inherit; text-align: right;
     padding: 4px 6px; border: 1px solid var(--line); background: #fff; color: #111;
+    -moz-appearance: textfield; appearance: textfield;
   }
+  .rotRow input::-webkit-inner-spin-button,
+  .rotRow input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .rotRow button { margin-left: auto; }
   .rotRow .unit { color: var(--dim); }
   .cropWrap { grid-column: 1 / -1; }
   .cropCv {
@@ -237,7 +245,25 @@
   .ctl.inactive input, .ctl.inactive .segRow button, .ctl.inactive .fileBtn,
   .ctl.inactive .rotRow button, .ctl.inactive .cropWrap { pointer-events: none; }
   .ctl output { text-align: right; color: #111; font-weight: 700; font-variant-numeric: tabular-nums; }
-  input[type=range] { width: 100%; height: 18px; accent-color: #111; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 18px; margin: 0; background: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 2px; background: var(--line); border-radius: 0;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 8px; height: 14px; margin-top: -6px;
+    background: #111; border: none; border-radius: 0;
+  }
+  input[type=range]::-moz-range-track {
+    height: 2px; background: var(--line); border-radius: 0;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 8px; height: 14px; background: #111; border: none; border-radius: 0;
+  }
+  input[type=range]:focus-visible { outline: 1px solid #111; outline-offset: 2px; }
   input[type=color] { width: 100%; height: 20px; padding: 0; border: 1px solid var(--line); background: none; }
   input[type=checkbox] { accent-color: #111; justify-self: start; }
   .row { display: flex; gap: 8px; padding: 10px 16px; }
@@ -247,6 +273,35 @@
   }
   button.ghost { background: #fff; color: #111; border: 1px solid #111; }
   button.act:hover { opacity: 0.86; }
+
+  /* ---- export drop-up menu ---- */
+  #exportMenu { flex: 1; position: relative; }
+  #exportMenu summary {
+    list-style: none; display: block; text-align: center; user-select: none;
+    font-size: 0.6875rem; font-weight: 400; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 9px 6px; background: #111; color: #fff; cursor: pointer;
+  }
+  #exportMenu summary::-webkit-details-marker { display: none; }
+  #exportMenu summary::after { content: " ▴"; }
+  #exportMenu[open] summary::after { content: " ▾"; }
+  #exportMenu summary:hover { opacity: 0.86; }
+  #exportMenu .menuList {
+    position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; z-index: 5;
+    display: flex; flex-direction: column; background: #fff; border: 1px solid #111;
+  }
+  #exportMenu .menuList button {
+    font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 8px 10px; background: #fff; color: #111; border: none;
+    border-bottom: 1px solid var(--line); cursor: pointer; text-align: left;
+  }
+  #exportMenu .menuList button:last-child { border-bottom: none; }
+  #exportMenu .menuList button:hover { background: #111; color: #fff; }
+  .linkBtn {
+    margin-left: auto; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em;
+    background: none; border: none; padding: 0; color: var(--dim);
+    text-decoration: underline dotted; cursor: pointer;
+  }
+  .linkBtn:hover { color: #111; }
   #tabs button:hover:not(.active) { background: #f2f2f2; }
   button:active { opacity: 0.7; }
 </style>
@@ -294,20 +349,23 @@
   </header>
   <div id="groups"></div>
   <div class="row">
-    <button class="act" id="dl-html">↓ HTML file</button>
-    <button class="act ghost" id="dl-json">↓ preset</button>
-  </div>
-  <div class="row" style="padding-top: 0;">
-    <button class="act ghost" id="dl-mp4">↓ mp4 10s</button>
-    <button class="act ghost" id="dl-png">↓ png</button>
-  </div>
-  <div class="row">
     <button class="act ghost" id="reset">reset shader</button>
     <button class="act ghost" id="reseed">randomize seed</button>
   </div>
   <div class="row">
     <button class="act ghost" id="save" title="Saves all shader settings, the hero text, and code edits — restored whenever this page opens">save settings</button>
-    <button class="act ghost" id="clear-save" title="Forgets the saved state — next load starts from factory defaults">clear saved</button>
+    <details id="exportMenu">
+      <summary role="button" aria-label="export menu">export</summary>
+      <div class="menuList">
+        <button id="dl-html" title="standalone interactive page for your site">↓ HTML file</button>
+        <button id="dl-json" title="current settings as JSON">↓ preset (JSON)</button>
+        <button id="dl-png" title="current frame as an image">↓ PNG frame</button>
+        <button id="dl-mp4" title="10-second live capture — interactions included">↓ MP4 · 10s</button>
+      </div>
+    </details>
+  </div>
+  <div class="row" style="padding-top: 0;">
+    <button id="clear-save" class="linkBtn" title="Forgets the saved state — next load starts from factory defaults">clear saved state</button>
   </div>
 </aside>
 
@@ -318,7 +376,7 @@
   <dl>
     <dt>canvas</dt><dd>every shader reacts to your cursor — sweep, drag, stir. On aura &amp; cup, drag web nodes or empty space to rotate in 3D.</dd>
     <dt>panel</dt><dd>sections are the shader's layers, in render order. Header checkboxes toggle a whole layer. Click any number to type an exact value; sliders nudge with ← → when focused.</dd>
-    <dt>export</dt><dd><b>html</b> — a standalone file of the current shader for your site · <b>preset</b> — settings as JSON · <b>mp4</b> — 10-second capture (interactions included) · <b>png</b> — current frame.</dd>
+    <dt>export</dt><dd>the black <b>export</b> button opens the formats: <b>html</b> — a standalone file of the current shader for your site · <b>preset</b> — settings as JSON · <b>png</b> — current frame · <b>mp4</b> — 10-second capture (interactions included).</dd>
     <dt>saving</dt><dd>save settings keeps everything (all shaders, hero text, code edits) in this browser across reloads. Undo is unlimited: <b>⌘Z / ⇧⌘Z</b>.</dd>
     <dt>code</dt><dd>the bottom drawer shows the live engine source — edit, apply, copy. Broken edits revert themselves.</dd>
   </dl>
@@ -556,6 +614,10 @@ function createEffect(canvas, C) {
     gl.uniform1f(U(progRings, 'uImgY'), C.imageY);
     gl.uniform1f(U(progRings, 'uImgFlip'), C.imageFlip ? 1 : 0);
     gl.uniform1f(U(progRings, 'uImgAlpha'), C.imageOpacity);
+    if (videoEl && videoReady) {           // pump the current video frame
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+    }
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, imgTex);
     gl.uniform1i(U(progRings, 'uImg'), 0);
@@ -585,25 +647,59 @@ function createEffect(canvas, C) {
 
   rebuild();
 
-  // optional background image (uploaded asset)
-  let imgTex = null, imgAspect = 1;
+  // optional background media (uploaded asset): still image or looping video
+  let imgTex = null, imgAspect = 1, videoEl = null, videoReady = false, videoObjURL = null;
+  const texParams = () => {
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
   const bgAsset = document.getElementById('asset-orbbg');
-  if (bgAsset && bgAsset.textContent.trim()) {
+  const bgSrc = bgAsset ? bgAsset.textContent.trim() : '';
+  if (bgSrc && /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(bgSrc)) {
+    videoEl = document.createElement('video');
+    Object.assign(videoEl, { muted: true, loop: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous' });
+    canvas._bgVideo = videoEl;             // shared with the cropper: it previews this exact decoder
+    videoEl.addEventListener('loadeddata', () => {
+      imgAspect = (videoEl.videoWidth / videoEl.videoHeight) || 1;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      texParams();
+      videoReady = true;
+    });
+    const play = () => videoEl && videoEl.play().catch(() => {});  // muted autoplay is allowed
+    if (bgSrc.startsWith('data:')) {
+      // <video> won't reliably load a large data: URL — feed it a blob URL instead
+      fetch(bgSrc).then(r => r.blob()).then(b => {
+        if (!videoEl) return;
+        videoObjURL = URL.createObjectURL(b);
+        videoEl.src = videoObjURL;
+        play();
+      }).catch(() => {});
+    } else {
+      videoEl.src = bgSrc;                 // http(s) URL passthrough
+      play();
+    }
+  } else if (bgSrc) {
     const img = new Image();
     img.onload = () => {
       imgAspect = img.width / img.height;
       imgTex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      texParams();
     };
-    img.src = bgAsset.textContent.trim();
+    img.src = bgSrc;
   }
   return {
     rebuild,
+    dispose() {                            // stop the video decode when the effect is torn down
+      canvas._bgVideo = null;              // release the cropper's shared reference
+      if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
+      if (videoObjURL) { URL.revokeObjectURL(videoObjURL); videoObjURL = null; }
+    },
     frame(dt, mouse) {
       const s = C.timeScale;
       simT += dt * s;
@@ -746,27 +842,61 @@ function createEffect(canvas, C) {
   }
   rebuild();
 
-  // optional background image (uploaded asset)
-  let imgTex = null, imgAspect = 1;
+  // optional background media (uploaded asset): still image or looping video
+  let imgTex = null, imgAspect = 1, videoEl = null, videoReady = false, videoObjURL = null;
+  const texParams = () => {
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
   const bgAsset = document.getElementById('asset-lavabg');
-  if (bgAsset && bgAsset.textContent.trim()) {
+  const bgSrc = bgAsset ? bgAsset.textContent.trim() : '';
+  if (bgSrc && /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(bgSrc)) {
+    videoEl = document.createElement('video');
+    Object.assign(videoEl, { muted: true, loop: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous' });
+    canvas._bgVideo = videoEl;             // shared with the cropper: it previews this exact decoder
+    videoEl.addEventListener('loadeddata', () => {
+      imgAspect = (videoEl.videoWidth / videoEl.videoHeight) || 1;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      texParams();
+      videoReady = true;
+    });
+    const play = () => videoEl && videoEl.play().catch(() => {});  // muted autoplay is allowed
+    if (bgSrc.startsWith('data:')) {
+      // <video> won't reliably load a large data: URL — feed it a blob URL instead
+      fetch(bgSrc).then(r => r.blob()).then(b => {
+        if (!videoEl) return;
+        videoObjURL = URL.createObjectURL(b);
+        videoEl.src = videoObjURL;
+        play();
+      }).catch(() => {});
+    } else {
+      videoEl.src = bgSrc;                 // http(s) URL passthrough
+      play();
+    }
+  } else if (bgSrc) {
     const img = new Image();
     img.onload = () => {
       imgAspect = img.width / img.height;
       imgTex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      texParams();
     };
-    img.src = bgAsset.textContent.trim();
+    img.src = bgSrc;
   }
 
   let simT = 0, mEase = [99, 99];
   return {
     rebuild,
+    dispose() {                            // stop the video decode when the effect is torn down
+      canvas._bgVideo = null;              // release the cropper's shared reference
+      if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
+      if (videoObjURL) { URL.revokeObjectURL(videoObjURL); videoObjURL = null; }
+    },
     frame(dt, mouse) {
       simT += dt * C.speed;
       const t = simT;
@@ -833,6 +963,10 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgY'), C.imageY);
       gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
       gl.uniform1f(U('uImgAlpha'), C.imageOpacity);
+      if (videoEl && videoReady) {         // pump the current video frame
+        gl.bindTexture(gl.TEXTURE_2D, imgTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      }
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.uniform1i(U('uImg'), 0);
@@ -962,6 +1096,7 @@ function createEffect(canvas, C) {
   if (src && /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(src)) {
     videoEl = document.createElement('video');
     Object.assign(videoEl, { muted: true, loop: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous' });
+    canvas._bgVideo = videoEl;             // shared with the cropper: it previews this exact decoder
     videoEl.addEventListener('loadeddata', () => {
       imgAspect = (videoEl.videoWidth / videoEl.videoHeight) || 1;
       imgTex = gl.createTexture();
@@ -1001,6 +1136,7 @@ function createEffect(canvas, C) {
   return {
     rebuild() {},
     dispose() {                            // stop the video decode when the effect is torn down
+      canvas._bgVideo = null;              // release the cropper's shared reference
       if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
       if (videoObjURL) { URL.revokeObjectURL(videoObjURL); videoObjURL = null; }
     },
@@ -1187,22 +1323,51 @@ function createEffect(canvas, C) {
   }
   rebuildAura();
 
-  // optional background image (uploaded asset)
-  let imgTex = null, imgAspect = 1;
+  // optional background media (uploaded asset): still image or looping video
+  let imgTex = null, imgAspect = 1, videoEl = null, videoReady = false, videoObjURL = null;
+  const texParams = () => {
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
   const bgAsset = document.getElementById('asset-aurabg');
-  if (bgAsset && bgAsset.textContent.trim()) {
+  const bgSrc = bgAsset ? bgAsset.textContent.trim() : '';
+  if (bgSrc && /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(bgSrc)) {
+    videoEl = document.createElement('video');
+    Object.assign(videoEl, { muted: true, loop: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous' });
+    canvas._bgVideo = videoEl;             // shared with the cropper: it previews this exact decoder
+    videoEl.addEventListener('loadeddata', () => {
+      imgAspect = (videoEl.videoWidth / videoEl.videoHeight) || 1;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      texParams();
+      videoReady = true;
+    });
+    const play = () => videoEl && videoEl.play().catch(() => {});  // muted autoplay is allowed
+    if (bgSrc.startsWith('data:')) {
+      // <video> won't reliably load a large data: URL — feed it a blob URL instead
+      fetch(bgSrc).then(r => r.blob()).then(b => {
+        if (!videoEl) return;
+        videoObjURL = URL.createObjectURL(b);
+        videoEl.src = videoObjURL;
+        play();
+      }).catch(() => {});
+    } else {
+      videoEl.src = bgSrc;                 // http(s) URL passthrough
+      play();
+    }
+  } else if (bgSrc) {
     const img = new Image();
     img.onload = () => {
       imgAspect = img.width / img.height;
       imgTex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      texParams();
     };
-    img.src = bgAsset.textContent.trim();
+    img.src = bgSrc;
   }
 
   const posData = new Float32Array(12 * 4);
@@ -1404,6 +1569,11 @@ function createEffect(canvas, C) {
 
   return {
     rebuild() { rebuildAura(); rebuildWeb(); },
+    dispose() {                            // stop the video decode when the effect is torn down
+      canvas._bgVideo = null;              // release the cropper's shared reference
+      if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
+      if (videoObjURL) { URL.revokeObjectURL(videoObjURL); videoObjURL = null; }
+    },
     frame(dt, mouse) {
       // ---- aura background ----
 
@@ -1451,6 +1621,10 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgY'), C.imageY);
       gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
       gl.uniform1f(U('uImgAlpha'), C.imageOpacity);
+      if (videoEl && videoReady) {         // pump the current video frame
+        gl.bindTexture(gl.TEXTURE_2D, imgTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      }
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.uniform1i(U('uImg'), 0);
@@ -1743,22 +1917,51 @@ function createEffect(canvas, C) {
   }
   rebuildLava();
 
-  // optional background image (uploaded asset)
-  let imgTex = null, imgAspect = 1;
+  // optional background media (uploaded asset): still image or looping video
+  let imgTex = null, imgAspect = 1, videoEl = null, videoReady = false, videoObjURL = null;
+  const texParams = () => {
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
   const bgAsset = document.getElementById('asset-cupbg');
-  if (bgAsset && bgAsset.textContent.trim()) {
+  const bgSrc = bgAsset ? bgAsset.textContent.trim() : '';
+  if (bgSrc && /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(bgSrc)) {
+    videoEl = document.createElement('video');
+    Object.assign(videoEl, { muted: true, loop: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous' });
+    canvas._bgVideo = videoEl;             // shared with the cropper: it previews this exact decoder
+    videoEl.addEventListener('loadeddata', () => {
+      imgAspect = (videoEl.videoWidth / videoEl.videoHeight) || 1;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      texParams();
+      videoReady = true;
+    });
+    const play = () => videoEl && videoEl.play().catch(() => {});  // muted autoplay is allowed
+    if (bgSrc.startsWith('data:')) {
+      // <video> won't reliably load a large data: URL — feed it a blob URL instead
+      fetch(bgSrc).then(r => r.blob()).then(b => {
+        if (!videoEl) return;
+        videoObjURL = URL.createObjectURL(b);
+        videoEl.src = videoObjURL;
+        play();
+      }).catch(() => {});
+    } else {
+      videoEl.src = bgSrc;                 // http(s) URL passthrough
+      play();
+    }
+  } else if (bgSrc) {
     const img = new Image();
     img.onload = () => {
       imgAspect = img.width / img.height;
       imgTex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      texParams();
     };
-    img.src = bgAsset.textContent.trim();
+    img.src = bgSrc;
   }
 
   let simT = 0, mEase = [99, 99];
@@ -1957,6 +2160,11 @@ function createEffect(canvas, C) {
 
   return {
     rebuild() { rebuildLava(); rebuildWeb(); },
+    dispose() {                            // stop the video decode when the effect is torn down
+      canvas._bgVideo = null;              // release the cropper's shared reference
+      if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
+      if (videoObjURL) { URL.revokeObjectURL(videoObjURL); videoObjURL = null; }
+    },
     frame(dt, mouse) {
       simT += dt * C.speed;
       const t = simT;
@@ -2065,6 +2273,10 @@ function createEffect(canvas, C) {
       gl.uniform1f(U('uImgY'), C.imageY);
       gl.uniform1f(U('uImgFlip'), C.imageFlip ? 1 : 0);
       gl.uniform1f(U('uImgAlpha'), C.imageOpacity);
+      if (videoEl && videoReady) {         // pump the current video frame
+        gl.bindTexture(gl.TEXTURE_2D, imgTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      }
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.uniform1i(U('uImg'), 0);
@@ -2969,10 +3181,9 @@ function buildPanel(GROUPS) {
       input = `<input type="checkbox" data-key="${key}" ${C[key] ? 'checked' : ''} aria-label="${label}">`;
     } else if (a === 'rot') {
       input = `<div class="rotRow">` +
-        `<button type="button" data-rot="-90" aria-label="rotate left 90 degrees">⟲ −90</button>` +
         `<input type="number" data-key="${key}" step="1" value="${C[key]}" aria-label="${label} in degrees">` +
         `<span class="unit">°</span>` +
-        `<button type="button" data-rot="90" aria-label="rotate right 90 degrees">⟳ +90</button></div>`;
+        `<button type="button" data-rot="90" aria-label="rotate 90 degrees">⟳ 90</button></div>`;
     } else if (a === 'crop') {
       input = `<div class="cropWrap"><canvas class="cropCv" width="264" height="150"></canvas>` +
         `<div class="cropBtns"><button type="button" data-zoom="0.9">− zoom</button>` +
@@ -3049,6 +3260,14 @@ function scheduleCrop() {
   if (cropRaf) return;
   cropRaf = requestAnimationFrame(() => { cropRaf = 0; drawCrop(); });
 }
+// keep the crop preview redrawing as a video decodes new frames
+const cropLiveSeen = new WeakSet();
+function cropLive(vid) {
+  if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype) || cropLiveSeen.has(vid)) return;
+  cropLiveSeen.add(vid);
+  const loop = () => { scheduleCrop(); vid.requestVideoFrameCallback(loop); };
+  vid.requestVideoFrameCallback(loop);
+}
 function cropPlaceholder(ctx, cv, msg) {
   ctx.fillStyle = '#fafafa';
   ctx.fillRect(0, 0, cv.width, cv.height);
@@ -3070,23 +3289,55 @@ function drawCrop() {
   const data = slot && slot.textContent.trim();
   cropMeta = null;
   if (!data) { cropPlaceholder(ctx, cv, 'upload an image to crop'); return; }
-  if (data.startsWith('data:video')) { cropPlaceholder(ctx, cv, 'video source — no crop preview'); return; }
+  const isVideo = /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(data);
+  // for video, draw the engine's own decoder (canvas._bgVideo): the cropper
+  // then shows the exact frame the shader preview is rendering right now.
+  // A cropper-local decoder is only a fallback (e.g. custom engine edits).
+  const sharedVid = isVideo ? document.getElementById('c')._bgVideo : null;
   let rec = cropImgs[assetId];
-  if (!rec || rec.src !== data) {
-    rec = cropImgs[assetId] = { src: data, img: new Image() };
-    rec.img.onload = () => scheduleCrop();
-    rec.img.src = data;
+  if (sharedVid && rec && rec.vid) {           // local fallback no longer needed
+    rec.vid.pause(); rec.vid.removeAttribute('src'); rec.vid.load();
+    if (rec.url) URL.revokeObjectURL(rec.url);
+    delete cropImgs[assetId];
+    rec = null;
   }
-  const img = rec.img;
-  if (!img.complete || !img.naturalWidth) { cropPlaceholder(ctx, cv, 'loading…'); return; }
-  const ia = img.naturalWidth / img.naturalHeight;
+  if (!sharedVid && (!rec || rec.src !== data)) {
+    if (rec && rec.vid) { rec.vid.pause(); rec.vid.removeAttribute('src'); rec.vid.load(); }
+    if (rec && rec.url) URL.revokeObjectURL(rec.url);
+    if (isVideo) {
+      rec = cropImgs[assetId] = { src: data, vid: document.createElement('video') };
+      Object.assign(rec.vid, { muted: true, loop: true, autoplay: true, playsInline: true });
+      rec.vid.addEventListener('loadeddata', () => scheduleCrop());
+      if (data.startsWith('data:')) {
+        // <video> won't reliably load a large data: URL — feed it a blob URL instead
+        fetch(data).then(r => r.blob()).then(b => {
+          if (cropImgs[assetId] !== rec) return;
+          rec.url = URL.createObjectURL(b);
+          rec.vid.src = rec.url;
+          rec.vid.play().catch(() => {});
+        });
+      } else {
+        rec.vid.src = data;
+        rec.vid.play().catch(() => {});
+      }
+    } else {
+      rec = cropImgs[assetId] = { src: data, img: new Image() };
+      rec.img.onload = () => scheduleCrop();
+      rec.img.src = data;
+    }
+  }
+  const vid = sharedVid || (rec && rec.vid) || null;
+  if (vid) cropLive(vid);
+  const img = vid || rec.img;
+  const ready = vid ? (vid.readyState >= 2 && vid.videoWidth) : (img.complete && img.naturalWidth);
+  if (!ready) { cropPlaceholder(ctx, cv, 'loading…'); return; }
+  const ia = vid
+    ? vid.videoWidth / vid.videoHeight
+    : img.naturalWidth / img.naturalHeight;
   const cw = cv.width, ch = cv.height;
   let dw = cw, dh = cw / ia;
   if (dh > ch) { dh = ch; dw = ch * ia; }
   const dx = (cw - dw) / 2, dy2 = (ch - dh) / 2;
-  ctx.fillStyle = '#fafafa';
-  ctx.fillRect(0, 0, cw, ch);
-  ctx.drawImage(img, dx, dy2, dw, dh);
   // viewport corners via the shader's forward transform
   const mc = document.getElementById('c');
   const A = mc.width / Math.max(mc.height, 1);
@@ -3110,7 +3361,14 @@ function drawCrop() {
     cU: (Math.min(...us) + Math.max(...us)) / 2,
     cV: (Math.min(...vs) + Math.max(...vs)) / 2,
   };
-  const pts = uvPts.map(([u, v]) => [dx + u * dw, dy2 + (1 - v) * dh]);
+  // the pan lives on the image, not the frame: shifting image AND frame by the
+  // same pixel offset keeps their relationship identical (same crop) while the
+  // frame stays put on screen and the image is the thing that moves under it
+  const offX = (C.imageX || 0) * wS * dw, offY = -(C.imageY || 0) * hS * dh;
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.drawImage(img, dx + offX, dy2 + offY, dw, dh);
+  const pts = uvPts.map(([u, v]) => [dx + u * dw + offX, dy2 + (1 - v) * dh + offY]);
   // snap guides: dashed center lines when the frame is centered on an axis
   ctx.save();
   ctx.setLineDash([4, 4]);
@@ -3118,14 +3376,14 @@ function drawCrop() {
   ctx.lineWidth = 1;
   if (Math.abs(cropMeta.cU - 0.5) < 0.002) {
     ctx.beginPath();
-    ctx.moveTo(dx + 0.5 * dw, dy2);
-    ctx.lineTo(dx + 0.5 * dw, dy2 + dh);
+    ctx.moveTo(dx + 0.5 * dw + offX, dy2 + offY);
+    ctx.lineTo(dx + 0.5 * dw + offX, dy2 + dh + offY);
     ctx.stroke();
   }
   if (Math.abs(cropMeta.cV - 0.5) < 0.002) {
     ctx.beginPath();
-    ctx.moveTo(dx, dy2 + 0.5 * dh);
-    ctx.lineTo(dx + dw, dy2 + 0.5 * dh);
+    ctx.moveTo(dx + offX, dy2 + 0.5 * dh + offY);
+    ctx.lineTo(dx + dw + offX, dy2 + 0.5 * dh + offY);
     ctx.stroke();
   }
   ctx.restore();
@@ -3160,9 +3418,10 @@ function bindCropper() {
     const scale = cv.width / cv.getBoundingClientRect().width;
     const dpx = (e.clientX - cropDragAt[0]) * scale, dpy = (e.clientY - cropDragAt[1]) * scale;
     cropDragAt = [e.clientX, e.clientY];
-    let Xc = Math.min(Math.max(C.imageX - (dpx / cropMeta.dw) / cropMeta.wS, -1.5), 1.5);
-    let Yc = Math.min(Math.max(C.imageY + (dpy / cropMeta.dh) / cropMeta.hS, -1.5), 1.5);
-    // magnetic snapping: the frame clicks onto the image center and edges.
+    // drag moves the media asset itself: the image follows the cursor
+    let Xc = Math.min(Math.max(C.imageX + (dpx / cropMeta.dw) / cropMeta.wS, -1.5), 1.5);
+    let Yc = Math.min(Math.max(C.imageY - (dpy / cropMeta.dh) / cropMeta.hS, -1.5), 1.5);
+    // magnetic snapping: alignment clicks onto the image center and edges.
     // uv positions shift linearly with pan, so project from the last draw.
     const m = cropMeta, EPS = 0.015;
     const dX = Xc - m.atX, dY = Yc - m.atY;
@@ -3556,7 +3815,7 @@ document.getElementById('dl-mp4').onclick = e => {
     a.click();
     URL.revokeObjectURL(a.href);
     delete btn.dataset.busy;
-    btn.textContent = '↓ mp4 10s';
+    btn.textContent = '↓ MP4 · 10s';
   };
   btn.dataset.busy = '1';
   let left = 10;
@@ -3569,6 +3828,19 @@ document.getElementById('dl-mp4').onclick = e => {
   rec.start();
   setTimeout(() => rec.stop(), 10000);
 };
+
+// export menu: instant downloads close it; MP4 stays open so the countdown is visible
+const exportMenu = document.getElementById('exportMenu');
+exportMenu.addEventListener('click', e => {
+  const item = e.target.closest('.menuList button');
+  if (item && item.id !== 'dl-mp4') exportMenu.removeAttribute('open');
+});
+document.addEventListener('click', e => {
+  if (exportMenu.open && !exportMenu.contains(e.target)) exportMenu.removeAttribute('open');
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') exportMenu.removeAttribute('open');
+});
 
 function buildStandalone(id, cfg) {
   const engine = engineSrc(id);                  // exports carry your code edits
