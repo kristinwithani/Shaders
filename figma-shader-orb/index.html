@@ -1013,7 +1013,7 @@ function createEffect(canvas, C) {
     float cr = cos(uImgRot), sr = sin(uImgRot);
     tq = mat2(cr, -sr, sr, cr) * tq;
     tq /= max(uImgZoom, 0.05);
-    uv = tq + 0.5 + vec2(uImgX, -uImgY);
+    uv = tq + 0.5 + vec2(-uImgX, uImgY);  // pan: +X right, +Y up on screen, like every other engine
     if (uImgAspect < 1.0) {
       float a = uImgAspect;
       uv.y = mix(0.0, 1.0 - a, uFocus) + uv.y * a;
