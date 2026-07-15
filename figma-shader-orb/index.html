@@ -589,7 +589,7 @@ function createEffect(canvas, C) {
     const mouseNear = Math.hypot(mouse[0], mouse[1]) < 5;
     const lenLo = Math.min(C.lenMin, C.lenMax), lenHi = Math.max(C.lenMin, C.lenMax);
     const span = Math.max(lenHi - lenLo, 1e-4);
-    const k = 2 / (C.avoidRadius * C.avoidRadius);
+    const k = 2 / (C.cursorRadius * C.cursorRadius);
     const wLo = Math.min(C.tipWidthMin, C.tipWidthMax), wHi = Math.max(C.tipWidthMin, C.tipWidthMax);
     const nLo = Math.min(C.nodeMin, C.nodeMax), nHi = Math.max(C.nodeMin, C.nodeMax);
     for (let i = 0; i < P.length; i++) {
@@ -608,7 +608,7 @@ function createEffect(canvas, C) {
         const force = Math.exp(-(dx * dx + dy * dy) * k);
         let dAng = ang - Math.atan2(mouse[1], mouse[0]);
         dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
-        tD = (dAng >= 0 ? 1 : -1) * force * C.avoidStrength;
+        tD = (dAng >= 0 ? 1 : -1) * force * -C.cursorPull;   // pull convention: − steers away
         tS = force * C.squish;
       }
       pt.deflV += (tD - pt.defl) * C.stiffness * dt;  pt.deflV *= Math.exp(-C.damping * dt);
@@ -1985,7 +1985,7 @@ function createEffect(canvas, C) {
       const persp = C.perspective;
       const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
       const wrap = v => { v = (v + 1.3) % 2.6; return (v < 0 ? v + 2.6 : v) - 1.3; };
-      const R2 = C.repelRadius * C.repelRadius;
+      const R2 = C.cursorRadius * C.cursorRadius;
       const dampF = Math.exp(-C.damping * dt);
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i];
@@ -1996,12 +1996,12 @@ function createEffect(canvas, C) {
         let py = wrap(p.y + (C.rise + p.vy * 0.25) * t);
         px += Math.sin(rawT * C.wobbleSpeed + p.ph) * C.wobbleAmp;
         py += Math.cos(rawT * C.wobbleSpeed * 0.87 + p.ph2) * C.wobbleAmp;
-        // cursor: gaussian push in screen space, spring pulls the particle home
+        // cursor: gaussian pull (− repels) in screen space, spring returns home
         let sx = px * s + p.dx, sy = py * s + p.dy;
-        if (mouseNear && C.repel !== 0) {
-          const ddx = sx - mouse[0], ddy = sy - mouse[1];
+        if (mouseNear && C.cursorPull !== 0) {
+          const ddx = mouse[0] - sx, ddy = mouse[1] - sy;
           const d2 = ddx * ddx + ddy * ddy;
-          const f = C.repel * 5 * Math.exp(-d2 / R2) * dt;
+          const f = C.cursorPull * 5 * Math.exp(-d2 / R2) * dt;
           const d = Math.max(Math.sqrt(d2), 1e-4);
           p.ux += (ddx / d) * f;
           p.uy += (ddy / d) * f;
@@ -2647,15 +2647,13 @@ const EFFECTS = {
       imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
-      imageX: c => c.imageOn,
-      imageY: c => c.imageOn,
       imageFlip: c => c.imageOn,
       imageOpacity: c => c.imageOn,
     },
     hint: 'sweep your cursor through the spikes — they steer away',
     openGroups: ['Structure', 'Gradient rings', 'Spikes'],
     LAYOUT: [
-      { t: 'background', toggle: 'imageOn', groups: ['Background image'] },
+      { t: 'background', toggle: 'imageOn', groups: ['Background media'] },
       { t: 'orb', groups: ['Structure', 'Gradient rings', 'Spikes', 'End nodes'],
         rename: { 'Structure': 'structure', 'Gradient rings': 'gradient rings', 'Spikes': 'spikes', 'End nodes': 'end nodes' } },
       { t: 'motion', groups: ['Idle motion'] },
@@ -2674,18 +2672,18 @@ const EFFECTS = {
       centerFade: 0.10, fadeReach: 0.60,
       showNodes: true, nodeColor: '#2a00ff', nodeMin: 0.7, nodeMax: 2.6,
       timeScale: 1.0, tumbleX: 0.07, tumbleY: 0.10, wobbleAmp: 0.025, wobbleSpeed: 0.5,
-      avoidStrength: 0.85, avoidRadius: 0.30, squish: 0.35,
+      cursorPull: -0.85, cursorRadius: 0.30, squish: 0.35,
       stiffness: 90, damping: 14,
       dprCap: 2, paused: false,
     },
     GROUPS: [
-      ['Background image', [
-        ['upload image', 'imageUpload', 'file'],
-        ['show image', 'imageOn', 'check'],
-        ['rotate image', 'imageRotate', 'rot'],
-        ['crop image', 'imageZoom', 'crop'],
+      ['Background media', [
+        ['upload image / video', 'imageUpload', 'file'],
+        ['show media', 'imageOn', 'check'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
-        ['image opacity', 'imageOpacity', 0, 1, 0.01],
+        ['media opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
       ['Structure', [
         ['particle count', 'count', 10, 800, 1, 'rebuild'],
@@ -2728,11 +2726,11 @@ const EFFECTS = {
         ['wobble speed', 'wobbleSpeed', 0, 4, 0.05],
       ]],
       ['Cursor physics', [
-        ['avoid strength', 'avoidStrength', 0, 3, 0.01],
-        ['avoid radius', 'avoidRadius', 0.05, 1, 0.01],
+        ['pull (− repels)', 'cursorPull', -3, 3, 0.05],
+        ['pull radius', 'cursorRadius', 0.05, 1.5, 0.01],
         ['radial squish', 'squish', -0.5, 0.9, 0.01],
-        ['spring stiffness', 'stiffness', 5, 400, 1],
-        ['spring damping', 'damping', 1, 60, 0.5],
+        ['spring stiffness', 'stiffness', 5, 300, 1],
+        ['spring damping', 'damping', 0.5, 30, 0.25],
       ]],
       ['Performance', [
         ['pixel ratio cap', 'dprCap', 0.5, 3, 0.25],
@@ -2753,15 +2751,13 @@ const EFFECTS = {
       imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
-      imageX: c => c.imageOn,
-      imageY: c => c.imageOn,
       imageFlip: c => c.imageOn,
       imageOpacity: c => c.imageOn,
     },
     hint: 'move your cursor into the lava — it tears apart',
     openGroups: ['Blobs', 'Color steps'],
     LAYOUT: [
-      { t: 'background', toggle: 'imageOn', groups: ['Background image'] },
+      { t: 'background', toggle: 'imageOn', groups: ['Background media'] },
       { t: 'lava', groups: ['Blobs', 'Color steps', 'Motion', 'Cursor physics'],
         rename: { 'Blobs': 'blobs', 'Color steps': 'color steps', 'Motion': 'motion', 'Cursor physics': 'cursor' } },
       { t: 'general', groups: ['Performance'] },
@@ -2781,13 +2777,13 @@ const EFFECTS = {
       dprCap: 2, paused: false,
     },
     GROUPS: [
-      ['Background image', [
-        ['upload image', 'imageUpload', 'file'],
-        ['show image', 'imageOn', 'check'],
-        ['rotate image', 'imageRotate', 'rot'],
-        ['crop image', 'imageZoom', 'crop'],
+      ['Background media', [
+        ['upload image / video', 'imageUpload', 'file'],
+        ['show media', 'imageOn', 'check'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
-        ['image opacity', 'imageOpacity', 0, 1, 0.01],
+        ['media opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
       ['Blobs', [
         ['blob count', 'blobCount', 2, 16, 1, 'rebuild'],
@@ -2823,7 +2819,7 @@ const EFFECTS = {
       ]],
       ['Cursor physics', [
         ['pull (\u2212 repels)', 'cursorPull', -3, 3, 0.05],
-        ['pull radius', 'cursorRadius', 0.1, 1.5, 0.01],
+        ['pull radius', 'cursorRadius', 0.05, 1.5, 0.01],
         ['shatter', 'shatter', 0, 2, 0.02],
         ['spring stiffness', 'stiffness', 5, 300, 1],
         ['spring damping', 'damping', 0.5, 30, 0.25],
@@ -2850,8 +2846,6 @@ const EFFECTS = {
       imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
-      imageX: c => c.imageOn,
-      imageY: c => c.imageOn,
       imageFlip: c => c.imageOn,
     },
     hint: 'the spotlight follows your cursor · upload your own image',
@@ -2877,10 +2871,10 @@ const EFFECTS = {
     },
     GROUPS: [
       ['Image / video', [
-        ['upload media', 'imageUpload', 'file'],
+        ['upload image / video', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
-        ['rotate image', 'imageRotate', 'rot'],
-        ['crop image', 'imageZoom', 'crop'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['background', 'bg', 'color'],
       ]],
@@ -2921,8 +2915,6 @@ const EFFECTS = {
       imageUpload: c => c.bgMode < 0.5,
       imageRotate: c => c.bgMode < 0.5,
       imageZoom: c => c.bgMode < 0.5,
-      imageX: c => c.bgMode < 0.5,
-      imageY: c => c.bgMode < 0.5,
       imageFlip: c => c.bgMode < 0.5,
       imageOpacity: c => c.bgMode < 0.5,
       bg1: c => c.bgMode >= 0.5,
@@ -2979,7 +2971,7 @@ const EFFECTS = {
       blobColor1: '#f9b85f', blobColor2: '#ffd9ec', blobColor3: '#b6d9ff',
       blobColor4: '#ffb37a', blobColor5: '#ff8fb3', blobColor6: '#c9b8ff',
       colorDrift: 0.05, driftSpeed: 0.25,
-      bgOn: true, bg1: '#ffffff', bg2: '#e6e1f4', irregularity: 0.8, grainScale: 100,
+      bg1: '#ffffff', bg2: '#e6e1f4', irregularity: 0.8, grainScale: 100,
       speed: 0.1,
       webOn: true,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
@@ -2994,10 +2986,10 @@ const EFFECTS = {
       ['Background', [
         ['mode', 'bgMode', 'seg', ['image', 'solid', 'blobs']],
         ['upload image / video', 'imageUpload', 'file'],
-        ['rotate image', 'imageRotate', 'rot'],
-        ['crop image', 'imageZoom', 'crop'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
-        ['image opacity', 'imageOpacity', 0, 1, 0.01],
+        ['media opacity', 'imageOpacity', 0, 1, 0.01],
         ['color', 'bg1', 'color'],
         ['gradient preset', 'bgPreset', 'seg', ['sunrise', 'lilac', 'sea', 'ink']],
       ]],
@@ -3044,8 +3036,6 @@ const EFFECTS = {
       imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
-      imageX: c => c.imageOn,
-      imageY: c => c.imageOn,
       imageFlip: c => c.imageOn,
       imageOpacity: c => c.imageOn,
       wobbleSpeed: c => c.wobbleAmp > 0,
@@ -3071,7 +3061,7 @@ const EFFECTS = {
       depth: 0.8, perspective: 2.6, depthFade: 0.55, depthShrink: 0.45,
       driftSpeed: 0.5, rise: 0.18, wind: 0.04, wobbleAmp: 0.05, wobbleSpeed: 0.7,
       twinkle: 0.3, twinkleSpeed: 0.8,
-      repel: 0.8, repelRadius: 0.35, stiffness: 60, damping: 7,
+      cursorPull: -0.8, cursorRadius: 0.35, stiffness: 60, damping: 7,
       dprCap: 2, paused: false,
     },
     GROUPS: [
@@ -3080,8 +3070,8 @@ const EFFECTS = {
         ['bottom color', 'bg2', 'color'],
         ['upload image / video', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
-        ['rotate image', 'imageRotate', 'rot'],
-        ['crop image', 'imageZoom', 'crop'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
         ['media opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
@@ -3113,8 +3103,8 @@ const EFFECTS = {
         ['twinkle speed', 'twinkleSpeed', 0, 4, 0.05],
       ]],
       ['Cursor physics', [
-        ['repel (− attracts)', 'repel', -3, 3, 0.05],
-        ['repel radius', 'repelRadius', 0.05, 1, 0.01],
+        ['pull (− repels)', 'cursorPull', -3, 3, 0.05],
+        ['pull radius', 'cursorRadius', 0.05, 1.5, 0.01],
         ['spring stiffness', 'stiffness', 5, 300, 1],
         ['spring damping', 'damping', 0.5, 30, 0.25],
       ]],
@@ -3142,8 +3132,6 @@ const EFFECTS = {
       imageUpload: c => c.imageOn,
       imageRotate: c => c.imageOn,
       imageZoom: c => c.imageOn,
-      imageX: c => c.imageOn,
-      imageY: c => c.imageOn,
       imageFlip: c => c.imageOn,
       imageOpacity: c => c.imageOn,
       webCount: c => c.webOn,
@@ -3173,8 +3161,8 @@ const EFFECTS = {
       { t: 'blobs', groups: ['Blobs', 'Blob colors', 'Motion'],
         rename: { 'Blobs': 'shape', 'Blob colors': 'colors', 'Motion': 'motion' } },
       { t: 'boundary', groups: ['Boundary'] },
-      { t: 'background', groups: ['Background image', 'Background'],
-        rename: { 'Background image': 'image', 'Background': 'colors' } },
+      { t: 'background', groups: ['Background media', 'Background'],
+        rename: { 'Background media': 'media', 'Background': 'colors' } },
       { t: 'web', toggle: 'webOn', groups: ['Web structure', 'Web nodes', 'Web lines', 'Web depth', 'Web physics', 'Web motion'],
         rename: { 'Web structure': 'structure', 'Web nodes': 'nodes', 'Web lines': 'lines', 'Web depth': 'depth', 'Web physics': 'physics', 'Web motion': 'motion' } },
       { t: 'cursor', groups: ['Cursor physics'] },
@@ -3247,13 +3235,13 @@ const EFFECTS = {
       ['Motion', [
         ['speed', 'speed', 0, 1, 0.005],
       ]],
-      ['Background image', [
-        ['upload image', 'imageUpload', 'file'],
-        ['show image', 'imageOn', 'check'],
-        ['rotate image', 'imageRotate', 'rot'],
-        ['crop image', 'imageZoom', 'crop'],
+      ['Background media', [
+        ['upload image / video', 'imageUpload', 'file'],
+        ['show media', 'imageOn', 'check'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
         ['flip horizontal', 'imageFlip', 'check'],
-        ['image opacity', 'imageOpacity', 0, 1, 0.01],
+        ['media opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
       ['Background', [
         ['color 1', 'bg1', 'color'],
@@ -3298,7 +3286,7 @@ const EFFECTS = {
       ]],
       ['Cursor physics', [
         ['pull (− repels)', 'cursorPull', -3, 3, 0.05],
-        ['pull radius', 'cursorRadius', 0.1, 1.5, 0.01],
+        ['pull radius', 'cursorRadius', 0.05, 1.5, 0.01],
         ['spring stiffness', 'stiffness', 5, 300, 1],
         ['spring damping', 'damping', 0.5, 30, 0.25],
       ]],
@@ -4066,6 +4054,14 @@ function loadState() {
   try {
     const snap = JSON.parse(localStorage.getItem(STORE_KEY));
     if (!snap || !snap.configs) return null;
+    // migration: cursor physics unified to cursorPull / cursorRadius, positive
+    // pulls toward the cursor (2026-07). Old keys carry over with signs flipped
+    // where the shader used a repel-positive convention.
+    const o = snap.configs.orb, pa = snap.configs.particle;
+    if (o && 'avoidStrength' in o && !('cursorPull' in o)) o.cursorPull = -o.avoidStrength;
+    if (o && 'avoidRadius' in o && !('cursorRadius' in o)) o.cursorRadius = o.avoidRadius;
+    if (pa && 'repel' in pa && !('cursorPull' in pa)) pa.cursorPull = -pa.repel;
+    if (pa && 'repelRadius' in pa && !('cursorRadius' in pa)) pa.cursorRadius = pa.repelRadius;
     // migration: the aura shader was renamed to web (2026-07)
     if (snap.configs.aura && !snap.configs.web) snap.configs.web = snap.configs.aura;
     if (snap.code && snap.code.aura && !snap.code.web) snap.code.web = snap.code.aura;
