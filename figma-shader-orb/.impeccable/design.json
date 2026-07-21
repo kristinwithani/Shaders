@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-21T16:13:03Z",
+  "title": "Design System: Shader Studio",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "primary", "displayName": "Signal Ink", "canonical": "#111111", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "paper": { "role": "neutral", "displayName": "Instrument White", "canonical": "#ffffff", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e4e4e4", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "section-rule": { "role": "neutral", "displayName": "Section Rule", "canonical": "#c9c9c9", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "dim": { "role": "neutral", "displayName": "Dim Readout", "canonical": "#6a6a6a", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "graphite": { "role": "neutral", "displayName": "Label Graphite", "canonical": "#3d3d3d", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "slate": { "role": "neutral", "displayName": "Sublabel Slate", "canonical": "#555555", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "field-wash": { "role": "neutral", "displayName": "Field Wash", "canonical": "#fafafa", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "hover-wash": { "role": "neutral", "displayName": "Hover Wash", "canonical": "#f2f2f2", "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(37% 0 0)", "oklch(48% 0 0)", "oklch(60% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"] },
+      "canvas-amber": { "role": "canvas", "displayName": "Core Amber", "canonical": "#f9b85f", "tonalRamp": ["oklch(20% 0.05 75)", "oklch(32% 0.08 75)", "oklch(44% 0.1 75)", "oklch(56% 0.12 75)", "oklch(68% 0.13 75)", "oklch(78% 0.13 75)", "oklch(87% 0.1 75)", "oklch(95% 0.05 75)"] },
+      "canvas-sand": { "role": "canvas", "displayName": "Halo Sand", "canonical": "#d9ccb0", "tonalRamp": ["oklch(20% 0.02 95)", "oklch(32% 0.03 95)", "oklch(44% 0.035 95)", "oklch(56% 0.04 95)", "oklch(68% 0.04 95)", "oklch(78% 0.04 95)", "oklch(87% 0.035 95)", "oklch(95% 0.02 95)"] },
+      "canvas-sky": { "role": "canvas", "displayName": "Ring Sky", "canonical": "#b6d9ff", "tonalRamp": ["oklch(20% 0.04 250)", "oklch(32% 0.06 250)", "oklch(44% 0.08 250)", "oklch(56% 0.09 250)", "oklch(68% 0.09 250)", "oklch(78% 0.08 250)", "oklch(87% 0.06 250)", "oklch(95% 0.03 250)"] },
+      "canvas-ultramarine": { "role": "canvas", "displayName": "Spike Ultramarine", "canonical": "#2a00ff", "tonalRamp": ["oklch(15% 0.12 265)", "oklch(25% 0.2 265)", "oklch(35% 0.27 265)", "oklch(45% 0.31 265)", "oklch(57% 0.26 265)", "oklch(69% 0.2 265)", "oklch(82% 0.12 265)", "oklch(94% 0.05 265)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero overlay headline only. The single non-mono voice; previews how a landing page sits on the shader." },
+      "headline": { "displayName": "Headline", "purpose": "The panel title. One per screen, uppercase, widest visible weight." },
+      "title": { "displayName": "Title", "purpose": "Layer section summaries. Widest tracking (0.1em) marks the deepest structure." },
+      "body": { "displayName": "Body", "purpose": "Panel base size: help prose and control labels. The code drawer's editor runs one rung smaller at the same leading." },
+      "label": { "displayName": "Label", "purpose": "The workhorse. Buttons, tabs, chips, file names, menu items, status lines. Uppercase." },
+      "label-strong": { "displayName": "Label Strong", "purpose": "Tabs. Same size as Label; weight does the emphasis." },
+      "readout": { "displayName": "Readout", "purpose": "Slider value readouts. Body-sized bold, tabular figures, no tracking, right-aligned." },
+      "micro": { "displayName": "Micro", "purpose": "Quiet utility buttons only. The smallest legible rung." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "dur-fast", "value": "150ms", "purpose": "Micro state confirmations: the editable readout's dotted underline." },
+      { "name": "dur-standard", "value": "200ms", "purpose": "Standard state transitions: the hero link arrow slide." },
+      { "name": "fade-slow", "value": "600ms", "purpose": "Reserved for the ambient canvas hint fade; never for controls." },
+      { "name": "ease-standard", "value": "ease", "purpose": "Default easing for all state transitions. No bounce, no elastic, no choreography." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Commit actions: save, apply, export. Ink fill, quiet opacity ease on hover.",
+      "html": "<button class=\"ds-btn-primary\">Save settings</button>",
+      "css": ".ds-btn-primary { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 8px 6px; min-width: 120px; background: #111111; color: #ffffff; border: none; border-radius: 0; cursor: pointer; transition: opacity 150ms ease; } .ds-btn-primary:hover { opacity: 0.86; } .ds-btn-primary:active { opacity: 0.7; } .ds-btn-primary:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Menu-item and card-action ghost: white fill, ink frame, full invert under the cursor. Footer commit ghosts share the frame but skip the invert; disabled fades to 0.25.",
+      "html": "<button class=\"ds-btn-ghost\">Close</button>",
+      "css": ".ds-btn-ghost { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 8px 6px; min-width: 120px; background: #ffffff; color: #111111; border: 1px solid #111111; border-radius: 0; cursor: pointer; transition: background 150ms ease, color 150ms ease; } .ds-btn-ghost:hover { background: #111111; color: #ffffff; } .ds-btn-ghost:active { opacity: 0.7; } .ds-btn-ghost:disabled { opacity: 0.25; cursor: default; } .ds-btn-ghost:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Canvas utilities. Dim voice behind a hairline; earns ink only under the cursor.",
+      "html": "<button class=\"ds-btn-quiet\">Reseed</button>",
+      "css": ".ds-btn-quiet { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.625rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 6px; min-width: 96px; background: #ffffff; color: #6a6a6a; border: 1px solid #e4e4e4; border-radius: 0; cursor: pointer; transition: color 150ms ease, border-color 150ms ease; } .ds-btn-quiet:hover { color: #111111; border-color: #111111; } .ds-btn-quiet:active { opacity: 0.7; } .ds-btn-quiet:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    },
+    {
+      "name": "Shader Tabs",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "The shader switcher: an ink-framed grid with hairline gaps reading as engraved separators; active tab inverts.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Shaders\"><button class=\"ds-tab ds-tab-active\">Orb</button><button class=\"ds-tab\">Lava</button><button class=\"ds-tab\">Pixels</button><button class=\"ds-tab\">Particle</button><button class=\"ds-tab\">Tide</button><button class=\"ds-tab\">Bleed</button></nav>",
+      "css": ".ds-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #e4e4e4; border: 1px solid #111111; width: 268px; } .ds-tab { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 8px 4px; background: #ffffff; color: #111111; border: none; border-radius: 0; cursor: pointer; transition: background 150ms ease; } .ds-tab:hover:not(.ds-tab-active) { background: #f2f2f2; } .ds-tab-active { background: #111111; color: #ffffff; } .ds-tab:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    },
+    {
+      "name": "Range Slider",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "The signature control: 2px hairline track, sharp 8x14 ink thumb, 18px hit area, no progress tint.",
+      "html": "<input class=\"ds-slider\" type=\"range\" min=\"0\" max=\"100\" value=\"62\" aria-label=\"Particle count\" />",
+      "css": ".ds-slider { -webkit-appearance: none; appearance: none; width: 240px; height: 18px; margin: 0; background: none; cursor: pointer; } .ds-slider::-webkit-slider-runnable-track { height: 2px; background: #e4e4e4; border-radius: 0; } .ds-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 8px; height: 14px; margin-top: -6px; background: #111111; border: none; border-radius: 0; } .ds-slider::-moz-range-track { height: 2px; background: #e4e4e4; border-radius: 0; } .ds-slider::-moz-range-thumb { width: 8px; height: 14px; background: #111111; border: none; border-radius: 0; } .ds-slider:hover::-webkit-slider-runnable-track { background: #c9c9c9; } .ds-slider:hover::-moz-range-track { background: #c9c9c9; } .ds-slider:focus-visible { outline: 1px solid #111111; outline-offset: 2px; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": "tab",
+      "description": "Preset bundles: equal-width hairline siblings; the selected segment inverts to ink.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\" aria-label=\"Palette preset\"><button class=\"ds-seg-btn ds-seg-on\">Dawn</button><button class=\"ds-seg-btn\">Dusk</button><button class=\"ds-seg-btn\">Moss</button><button class=\"ds-seg-btn\">Mono</button></div>",
+      "css": ".ds-seg { display: flex; gap: 4px; width: 268px; } .ds-seg-btn { flex: 1; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 0; background: #ffffff; color: #111111; border: 1px solid #e4e4e4; border-radius: 0; cursor: pointer; transition: border-color 150ms ease; } .ds-seg-btn:hover { border-color: #111111; } .ds-seg-on { background: #111111; color: #ffffff; border-color: #111111; } .ds-seg-btn:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    },
+    {
+      "name": "Editable Readout",
+      "kind": "custom",
+      "refersTo": "input-field",
+      "description": "Every value is an input: tabular bold at rest, dotted ink underline on hover disclosing editability.",
+      "html": "<div class=\"ds-readout-row\"><span class=\"ds-readout-label\">circle radius</span><span class=\"ds-readout\" tabindex=\"0\">0.62</span></div>",
+      "css": ".ds-readout-row { display: grid; grid-template-columns: 1fr 52px; gap: 8px; align-items: center; width: 268px; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.71875rem; } .ds-readout-label { color: #3d3d3d; } .ds-readout { text-align: right; color: #111111; font-weight: 700; font-variant-numeric: tabular-nums; cursor: text; border-bottom: 1px dotted transparent; transition: border-color 150ms ease; } .ds-readout:hover { border-bottom-color: #111111; } .ds-readout:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    },
+    {
+      "name": "Layer Section",
+      "kind": "custom",
+      "refersTo": "tab",
+      "description": "A collapsible layer: dim disclosure triangle, tracked uppercase title, ink power switch, section rule beneath.",
+      "html": "<details class=\"ds-sec\" open><summary class=\"ds-sec-summary\"><span class=\"ds-sec-marker\">▾</span> Gradient rings <input class=\"ds-sec-toggle\" type=\"checkbox\" checked aria-label=\"Layer on\" /></summary><div class=\"ds-sec-body\">ring 1 color (center)</div></details>",
+      "css": ".ds-sec { width: 268px; border-bottom: 1px solid #c9c9c9; padding-bottom: 8px; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; } .ds-sec-summary { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px; cursor: pointer; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.75rem; color: #111111; user-select: none; list-style: none; } .ds-sec-summary::-webkit-details-marker { display: none; } .ds-sec-marker { color: #6a6a6a; } .ds-sec-toggle { margin-left: auto; accent-color: #111111; } .ds-sec-body { padding: 7px 16px 6px; font-size: 0.71875rem; color: #3d3d3d; } .ds-sec-summary:hover .ds-sec-marker { color: #111111; } .ds-sec-summary:focus-visible { outline: 2px solid #111111; outline-offset: 1px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Oscilloscope",
+    "overview": "The studio is a measurement instrument. The chrome is the bezel: matte, monochrome, engraved with small uppercase labels. The shader canvas is the phosphor screen, the one luminous thing in the room, and every design decision exists to keep it that way. The panel measures, frames, and adjusts the signal; it never performs alongside it. Personality in three words: calibrated, dense, confident. Density is a feature: many controls, tightly stacked, every one labeled, legible, and predictable. Restraint is the discipline that makes density readable: one ink, one family of greys, hairline structure, sharp corners, and a single interaction signature (invert to ink). The system explicitly rejects its era's defaults: AI-slop dashboards (dark mode + neon glow, glassmorphism, gradient text), generic Tailwind card grids, and rounded-everything SaaS chrome. Light theme only; the canvas supplies darkness and color when the work calls for it.",
+    "keyCharacteristics": [
+      "Monochrome chrome; all color belongs to the shader canvas and its swatches",
+      "JetBrains Mono UI text with uppercase, letter-spaced micro-labels",
+      "Hairline structure: 1px borders and 1px gaps instead of shadows or fills",
+      "Invert-to-ink as the single state signature across tabs, buttons, and toggles",
+      "Sharp corners everywhere except the arched canvas frame and the circular help key",
+      "Functional motion only: 150 to 200ms state confirmations, reduced-motion respected"
+    ],
+    "rules": [
+      { "name": "The One-Ink Rule", "body": "The panel is monochrome. Ink, white, and the grey ladder are the entire chrome vocabulary; any other color on the bezel is a defect. Color belongs to the canvas and to swatch wells reporting canvas state.", "section": "colors" },
+      { "name": "The Invert Rule", "body": "State is shown by inversion, never by tint or accent: active and selected surfaces fill with Signal Ink and set their text in Instrument White. If a control needs to say \"on,\" it flips to ink. Nothing glows.", "section": "colors" },
+      { "name": "The Micro-Label Rule", "body": "Every UI label is uppercase, 0.6875rem or smaller, and tracked at least 0.05em. Hierarchy comes from weight (400, 600, 700) and tracking (0.05 to 0.1em), never from size jumps inside the panel. The code status line is tracked feedback prose; like the canvas hint, it is exempt from the uppercase clause.", "section": "typography" },
+      { "name": "The Tabular Rule", "body": "Slider value readouts are set in tabular figures, weight 700, right-aligned; values must not jitter as digits change. The FPS line and rotate input carry the same tabular figures at regular weight (telemetry and input, not readouts); the crop zoom readout complies in full.", "section": "typography" },
+      { "name": "The Two-Voices Rule", "body": "Satoshi appears only inside the hero overlay preview. A display face in the chrome (buttons, labels, panel text) is prohibited.", "section": "typography" },
+      { "name": "The No-Shadow Rule", "body": "box-shadow is prohibited. If a surface floats, frame it in 1px Signal Ink. If a frame is not enough, the surface is wrong.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the panel monochrome: Signal Ink (#111111), Instrument White (#ffffff), and the named grey ladder are the entire chrome palette.",
+      "Do show state by inversion: active means ink fill with white text, everywhere, always the same.",
+      "Do draw structure with 1px lines: Hairline for separation, Signal Ink for emphasis and floating frames.",
+      "Do set every label uppercase in the mono stack, 0.6875rem or smaller, tracked 0.05em or wider.",
+      "Do set slider readouts in tabular figures, 700, right-aligned, and keep them click-to-edit; the FPS line, crop zoom, and rotate input share the same figures.",
+      "Do reference the named tokens instead of raw values; the ladder lives as CSS custom properties (--ink, --paper, --hairline, --section-rule, --dim, --graphite, --slate, --field-wash, --hover-wash) precisely so no new grey is ever invented.",
+      "Do hold spacing to the ladder: 4/6/8/12/16px with the 8px beat carrying vertical rhythm; the only off-ladder values that remain are optical offsets and the hero overlay's editorial margins, and they belong to the signal, not the bezel.",
+      "Do keep motion functional: 150 to 200ms ease on state changes, and boot shaders paused under prefers-reduced-motion.",
+      "Do give every interactive element the universal focus ring: 2px Signal Ink outline, offset 1px.",
+      "Do keep every text grey at or above 4.5:1 on its wash: Dim Readout (#6a6a6a) is the lightest permitted text color, 5.41:1 on Instrument White and 5.19:1 on Field Wash; no lighter grey may carry text.",
+      "Do keep every control keyboard-operable: sliders nudge with arrow keys, readouts open to edit from focus, and the focus ring is never suppressed."
+    ],
+    "donts": [
+      "Don't build AI-slop dashboards: dark mode + neon glow, glassmorphism, and gradient text are prohibited by name.",
+      "Don't reach for generic Tailwind card grids or rounded-everything SaaS chrome; this bezel has sharp corners and exactly two curves (the canvas arch, the help key).",
+      "Don't put color on the bezel. If a screenshot of the panel contains anything beyond ink, white, and the grey ladder outside a swatch well, the chrome has failed.",
+      "Don't cast shadows. The chrome carries none; the popover and help card float on their 1px Signal Ink frames, and no blur returns.",
+      "Don't use a display face in the chrome; Satoshi exists only inside the hero overlay preview.",
+      "Don't use colored side-stripe borders, hero-metric stat blocks, or modal dialogs where an inline surface will do; the studio has none and gains none.",
+      "Don't ship a dark theme. Light theme only; the canvas supplies darkness when the work calls for it.",
+      "Don't animate layout properties or add entrance choreography; the instrument is already on when you sit down."
+    ]
+  }
+}
