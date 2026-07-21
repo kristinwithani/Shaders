@@ -323,16 +323,25 @@
   #exportMenu[open] summary::after { content: " ▾"; }
   #exportMenu summary:hover { opacity: 0.86; }
   #exportMenu .menuList {
-    position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; z-index: 5;
-    display: flex; flex-direction: column; background: #fff; border: 1px solid #111;
+    position: absolute; bottom: calc(100% + 4px); right: 0; width: 268px; z-index: 5;
+    display: flex; flex-direction: column; gap: 6px; padding: 6px;
+    background: #fff; border: 1px solid #111;
   }
-  #exportMenu .menuList button {
-    font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
-    padding: 8px 10px; background: #fff; color: #111; border: none;
-    border-bottom: 1px solid var(--line); cursor: pointer; text-align: left;
+  #exportMenu .menuTiles { display: flex; gap: 6px; }
+  #exportMenu .menuTiles button {
+    flex: 1; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 8px 4px; background: #fff; color: #111;
+    border: 1px solid var(--line); cursor: pointer; text-align: center;
   }
-  #exportMenu .menuList button:last-child { border-bottom: none; }
-  #exportMenu .menuList button:hover { background: #111; color: #fff; }
+  #exportMenu .menuTiles button:hover { background: #111; color: #fff; border-color: #111; }
+  /* the video family lives in one container; durations sit inside it */
+  #exportMenu .menuVideo {
+    border: 1px solid var(--line); padding: 6px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  #exportMenu .menuVideo .menuHead {
+    font-size: 0.5625rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+  }
   .linkBtn {
     margin-left: auto; font: inherit; font-size: 0.6875rem; letter-spacing: 0.05em;
     background: none; border: none; padding: 0; color: var(--dim);
@@ -377,6 +386,7 @@
       <button data-shader="pixels">pixels</button>
       <button data-shader="particle">particle</button>
       <button data-shader="tide">tide</button>
+      <button data-shader="silk">silk</button>
     </div>
     <div id="histRow">
       <button id="undoBtn" disabled>↶ undo</button>
@@ -395,10 +405,19 @@
       <details id="exportMenu">
         <summary role="button" aria-label="export menu">export</summary>
         <div class="menuList">
-          <button id="dl-html" title="standalone interactive page for your site">↓ HTML file</button>
-          <button id="dl-json" title="current settings as JSON">↓ preset (JSON)</button>
-          <button id="dl-png" title="current frame as an image">↓ PNG frame</button>
-          <button id="dl-mp4" title="10-second live capture — interactions included">↓ MP4 · 10s</button>
+          <div class="menuTiles">
+            <button id="dl-html" title="standalone interactive page for your site">↓ HTML</button>
+            <button id="dl-json" title="current settings as JSON">↓ preset</button>
+            <button id="dl-png" title="current frame as an image">↓ PNG</button>
+          </div>
+          <div class="menuVideo">
+            <span class="menuHead">video · mp4</span>
+            <div class="menuTiles">
+              <button class="dl-mp4" data-secs="3" title="3-second live capture — interactions included">↓ 3s</button>
+              <button class="dl-mp4" data-secs="5" title="5-second live capture — interactions included">↓ 5s</button>
+              <button class="dl-mp4" data-secs="10" title="10-second live capture — interactions included">↓ 10s</button>
+            </div>
+          </div>
         </div>
       </details>
     </div>
@@ -410,12 +429,12 @@
 
 <div id="helpCard" hidden>
   <h2>SHADER STUDIO</h2>
-  <p>Five interactive WebGL shaders for website backgrounds. Pick a tab,
+  <p>Six interactive WebGL shaders for website backgrounds. Pick a tab,
   play with the canvas, tune the layers on the right — then export.</p>
   <dl>
     <dt>canvas</dt><dd>every shader reacts to your cursor — sweep, drag, stir. On tide, drag web nodes or empty space to rotate in 3D.</dd>
     <dt>panel</dt><dd>sections are the shader's layers, in render order. Header checkboxes toggle a whole layer. Click any number to type an exact value; sliders nudge with ← → when focused.</dd>
-    <dt>export</dt><dd>the black <b>export</b> button opens the formats: <b>html</b> — a standalone file of the current shader for your site · <b>preset</b> — settings as JSON · <b>png</b> — current frame · <b>mp4</b> — 10-second capture (interactions included).</dd>
+    <dt>export</dt><dd>the black <b>export</b> button opens the formats: <b>html</b> — a standalone file of the current shader for your site · <b>preset</b> — settings as JSON · <b>png</b> — current frame · <b>mp4</b> — 3 / 5 / 10-second capture (interactions included).</dd>
     <dt>saving</dt><dd>save settings keeps everything (all shaders, hero text, code edits) in this browser across reloads. Undo is unlimited: <b>⌘Z / ⇧⌘Z</b>.</dd>
     <dt>code</dt><dd>the bottom drawer shows the live engine source — edit, apply, copy. Broken edits revert themselves.</dd>
   </dl>
@@ -1548,10 +1567,11 @@ function createEffect(canvas, C) {
   const FS = `#version 300 es
   precision highp float;
   uniform vec2 uRes;
-  uniform float uTime, uSoftK, uOpacity, uAngle, uEdgeBlur;
+  uniform float uTime, uSoftK, uOpacity, uAngle, uEdgeBlur, uFlood, uSplit, uSat, uShapeAmt;
   uniform float uLevel, uBSoft, uLineA;
   uniform vec3 uLineCol;
-  uniform vec4 uBlobs[12];      // x, y, radius, -
+  uniform vec4 uBlobs[12];      // x, y, radius, shape phase
+  uniform vec4 uSquish[12];     // contact dir x, y, amount, light angle
   uniform vec3 uBlobCols[12];
   uniform int uNB;
   uniform vec3 uBg1, uBg2;
@@ -1587,13 +1607,68 @@ function createEffect(canvas, C) {
     float bSoft = uBSoft + eb * 0.35;
     float softK = uSoftK / (1.0 + eb * 6.0);
     float mask = smoothstep(uLevel + bSoft, uLevel - bSoft, p.y);
+    vec3 acc = vec3(0.0);
+    vec3 wsum = vec3(0.0);
     for (int i = 0; i < 12; i++) {
       if (i >= uNB) break;
       vec2 d = p - uBlobs[i].xy;
       float r = max(uBlobs[i].z, 1e-3);
-      float a = exp(-dot(d, d) / (r * r) * softK);
-      col = mix(col, uBlobCols[i], a * uOpacity * mask);
+      // shape: seeded angular harmonics pull each blob away from a perfect
+      // disc; slow time terms make the silhouettes breathe
+      if (uShapeAmt > 0.0) {
+        float ang = atan(d.y, d.x);
+        float ph = uBlobs[i].w;
+        float w = sin(ang * 2.0 + ph + uTime * 0.10) * 0.5
+                + sin(ang * 3.0 - ph * 1.7 - uTime * 0.07) * 0.3
+                + sin(ang * 5.0 + ph * 2.3) * 0.2;
+        r *= 1.0 + uShapeAmt * w * 0.55;
+      }
+      // collision squish: the side pressed against a neighbour flattens,
+      // the far side bulges slightly — soft bodies, not overlapping ghosts
+      vec4 sq = uSquish[i];
+      if (sq.z > 0.001) {
+        float along = dot(d / max(length(d), 1e-4), sq.xy);
+        r *= 1.0 - sq.z * 0.5 * max(along, 0.0) + sq.z * 0.22 * max(-along, 0.0);
+      }
+      // rgb edge split: each channel sees a different blob radius, so the
+      // falloffs part into chromatic fringes where blob edges bleed together
+      float rr = r * (1.0 + uSplit * 1.2), rb = r * max(1.0 - uSplit * 1.2, 0.05);
+      vec3 a3 = vec3(exp(-dot(d, d) / (rr * rr) * softK),
+                     exp(-dot(d, d) / (r * r) * softK),
+                     exp(-dot(d, d) / (rb * rb) * softK));
+      col = mix(col, uBlobCols[i], a3 * uOpacity * mask);
+      // light: each blob carries its own light direction (swinging toward its
+      // travel); dispersion gathers on the lit limb like a moving body
+      // catching light on its leading edge
+      vec2 Li = vec2(cos(sq.w), sin(sq.w));
+      vec2 dir = d / max(length(d), 1e-4);
+      float lit = 0.30 + 0.70 * smoothstep(-0.35, 0.9, dot(dir, Li));
+      float aG = a3.g;
+      float band = aG * (1.0 - aG) * 4.0;      // peaks mid-falloff, dark at core and far field
+      vec3 spec = 0.5 + 0.5 * cos(6.28318 * ((1.0 - aG) * 0.75 + vec3(0.0, -0.33, -0.67)));
+      col += spec * band * band * lit * (uSplit * 1.5) * uOpacity * mask;
+      // specular flare near the lit edge, with a slim perpendicular glint —
+      // a lens-like flick that breathes slowly per blob
+      vec2 hp = uBlobs[i].xy + Li * r * 0.45;
+      vec2 hd = p - hp;
+      float fl = exp(-dot(hd, hd) / (r * r * 0.045));
+      float tw = 0.8 + 0.2 * sin(uTime * 1.1 + uBlobs[i].w * 3.7);
+      vec2 gx = vec2(Li.y, -Li.x);
+      float ga = dot(hd, gx), gb = dot(hd, Li);
+      float glint = exp(-(ga * ga / (r * r * 0.16) + gb * gb / (r * r * 0.004)));
+      col += (vec3(1.0, 0.98, 0.94) * fl * 0.55 + spec * glint * 0.35) * tw * uSplit * uOpacity * mask;
+      acc += uBlobCols[i] * (a3 + 1e-4);
+      wsum += a3 + 1e-4;
     }
+    // at the fill endpoint the pool floods: the normalized blob blend is
+    // defined at every pixel (gaussian tails never reach zero), so blobs
+    // cover the whole frame with no background peeking through the gaps
+    if (uFlood > 0.0 && uNB > 0) {
+      col = mix(col, acc / wsum, uFlood * uOpacity * mask);
+    }
+    // saturation: 0 greyscale, 1 as-authored, 2 vivid
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = clamp(mix(vec3(lum), col, uSat), 0.0, 1.0);
     // optional hairline right at the waterline (defocused near the frame edge)
     float ln = (1.0 - smoothstep(0.004, 0.016 + eb * 0.05, abs(p.y - uLevel))) * (1.0 - eb * 0.8);
     col = mix(col, uLineCol, ln * uLineA);
@@ -1635,12 +1710,17 @@ function createEffect(canvas, C) {
       const h = k => hash(i * 23.17 + k * 71.3);
       const a = h(3) * 6.28318;
       blobs.push({
-        x: (h(1) - 0.5) * 1.5, y: -0.9 + h(2) * 0.8,   // start inside the pool
+        x: (h(1) - 0.5) * 1.5,
+        y: (h(2) - 0.5) * 1.8,             // free float: anywhere in the frame
         dx: Math.cos(a), dy: Math.sin(a),
         rf: (h(4) - 0.5) * 2,
         phase: h(5) * 6.28318,
         ox: 0, oy: 0, vx: 0, vy: 0,                     // cursor stir displacement + velocity
       });
+    }
+    for (const b of blobs) {
+      b.lastPx = b.x; b.lastPy = b.y;
+      b.lx = -0.5547; b.ly = 0.8321;                    // per-blob light, starts at the global source
     }
   }
   rebuildBlobs();
@@ -1694,6 +1774,7 @@ function createEffect(canvas, C) {
 
   const posData = new Float32Array(12 * 4);
   const colData = new Float32Array(12 * 3);
+  const squishData = new Float32Array(12 * 4);   // contact dir x, y, amount, light angle
 
   // ==================== web overlay (mirrors the web shader) ====================
 
@@ -1844,7 +1925,7 @@ function createEffect(canvas, C) {
   // yaw chases yawTarget with a lag, so node drags swing the whole web
   // around the spin axis at a slight delay while the spin keeps running
   let yaw = 0.5, yawTarget = 0.5, pitch = -0.25, pitchTarget = -0.25;
-  let dragIdx = -1, rotating = false;
+  let dragIdx = -1, rotating = false, movingWeb = false;
   let spinDir = 1, tiltDir = 1;      // idle rotation follows the last drag direction
   let lastU = [0, 0], dragTarget = [0, 0];
   const toUnit = ev => {
@@ -1853,6 +1934,12 @@ function createEffect(canvas, C) {
   };
   canvas.addEventListener('pointerdown', ev => {
     const u = toUnit(ev);
+    if (C.webOn && C.webDrag) {            // reposition mode: drag the whole web
+      movingWeb = true;
+      lastU = u;
+      canvas.setPointerCapture(ev.pointerId);
+      return;
+    }
     let best = -1, bestD = 0.09;
     for (let i = 0; i < nodes.length; i++) {
       const d = Math.hypot(nodes[i].px - u[0], nodes[i].py - u[1]);
@@ -1865,6 +1952,12 @@ function createEffect(canvas, C) {
   });
   canvas.addEventListener('pointermove', ev => {
     const u = toUnit(ev);
+    if (movingWeb) {
+      C.webX = (C.webX || 0) + (u[0] - lastU[0]);
+      C.webY = (C.webY || 0) + (u[1] - lastU[1]);
+      lastU = u;
+      return;
+    }
     const dxu = u[0] - lastU[0], dyu = u[1] - lastU[1];
     if (dragIdx >= 0 || rotating) {
       // the idle spin continues in whichever direction you dragged
@@ -1883,7 +1976,7 @@ function createEffect(canvas, C) {
     }
     lastU = u;
   });
-  const release = () => { dragIdx = -1; rotating = false; };
+  const release = () => { dragIdx = -1; rotating = false; movingWeb = false; };
   canvas.addEventListener('pointerup', release);
   canvas.addEventListener('pointercancel', release);
 
@@ -1898,25 +1991,32 @@ function createEffect(canvas, C) {
     frame(dt, mouse) {
       if (!C.blobStatic) simT += dt;   // static freezes drift and hue motion
       const bound = 0.95;
-      // waterline in unit space; fill 1 lifts the line plus its soft edge
-      // fully above the frame so the pool reaches the very top
-      const level = -1 + C.fillLevel * (2 + C.boundarySoft * 2);
-      const yTop = Math.min(level, bound);
-      const nPal = Math.min(Math.max(Math.round(C.paletteCount), 1), 6);
+      // waterline in unit space; fill 1 lifts the line plus its soft edge —
+      // including the widest frame-edge-blur widening (0.35) — fully above
+      // the frame, so the pool floods to the very top in every configuration
+      const level = -1 + C.fillLevel * (2 + C.boundarySoft * 2 + 0.4);
+      const nPal = Math.min(Math.max(Math.round(C.paletteCount), 1), 10);
       const mouseNear = Math.hypot(mouse[0], mouse[1]) < 5;
       const R2 = C.cursorRadius * C.cursorRadius;
       const damp = Math.exp(-C.damping * dt);
       for (let i = 0; i < blobs.length; i++) {
         const b = blobs[i];
         if (!C.blobStatic) {
-          // slow infinite wall bounce, ceiling = the waterline
-          b.x += b.dx * C.speed * dt;
-          b.y += b.dy * C.speed * dt;
+          // idle wander: headings curve gently on two slow sine clocks, so
+          // blobs meander around the frame instead of ping-ponging straight
+          const turn = (Math.sin(simT * 0.35 + b.phase * 2.3)
+                      + Math.sin(simT * 0.13 + b.phase * 5.1)) * 0.35 * dt;
+          const ct = Math.cos(turn), st = Math.sin(turn);
+          const ndx = b.dx * ct - b.dy * st, ndy = b.dx * st + b.dy * ct;
+          b.dx = ndx; b.dy = ndy;
+          const sf = 1 + b.rf * 0.35;            // per-blob pace variation
+          b.x += b.dx * C.speed * sf * dt;
+          b.y += b.dy * C.speed * sf * dt;
           if (b.x > bound) { b.x = bound; b.dx = -Math.abs(b.dx); }
           if (b.x < -bound) { b.x = -bound; b.dx = Math.abs(b.dx); }
+          if (b.y > bound) { b.y = bound; b.dy = -Math.abs(b.dy); }
           if (b.y < -bound) { b.y = -bound; b.dy = Math.abs(b.dy); }
         }
-        if (b.y > yTop) { b.y = yTop; b.dy = -Math.abs(b.dy); }   // waterline clamps even when static
         // cursor stir: gaussian pull (negative repels) with a spring back home
         let fx = 0, fy = 0;
         if (mouseNear && C.cursorPull !== 0) {
@@ -1930,9 +2030,9 @@ function createEffect(canvas, C) {
         b.vy += (fy * 1.5 - b.oy * C.stiffness * 0.02) * dt * 60 * 0.05;
         b.vx *= damp; b.vy *= damp;
         b.ox += b.vx * dt * 60 * 0.05; b.oy += b.vy * dt * 60 * 0.05;
-        posData[i * 4] = b.x + b.ox;
-        posData[i * 4 + 1] = b.y + b.oy;
-        posData[i * 4 + 2] = C.size * (1 + b.rf * C.sizeVariation);
+        b.px = b.x + b.ox;
+        b.py = b.y + b.oy;
+        b.rad = C.size * (1 + b.rf * C.sizeVariation);
         // subtle continuous hue drift around each blob's palette colour
         const base = hex(C['blobColor' + (i % nPal + 1)]);
         const hsv = rgb2hsv(base[0], base[1], base[2]);
@@ -1940,17 +2040,85 @@ function createEffect(canvas, C) {
         const rgb = hsv2rgb(hsv[0], hsv[1], hsv[2]);
         colData[i * 3] = rgb[0]; colData[i * 3 + 1] = rgb[1]; colData[i * 3 + 2] = rgb[2];
       }
+
+      // ---- soft contact: blobs press and squish instead of overlapping ----
+      for (let i = 0; i < blobs.length; i++) { const b = blobs[i]; b.sqx = 0; b.sqy = 0; b.sqa = 0; }
+      if (C.blobSquish > 0) {
+        const relax = Math.min(dt * 6, 1);   // overlap resolves over ~1/6s: squishy, not snappy
+        for (let i = 0; i < blobs.length; i++) for (let j = i + 1; j < blobs.length; j++) {
+          const A = blobs[i], B = blobs[j];
+          const dxp = B.px - A.px, dyp = B.py - A.py;
+          const minD = (A.rad + B.rad) * 0.62;   // gaussians read as solid around 0.6r
+          const dist = Math.max(Math.hypot(dxp, dyp), 1e-4);
+          if (dist >= minD) continue;
+          const ux = dxp / dist, uy = dyp / dist;
+          const depth = 1 - dist / minD;
+          if (!C.blobStatic) {
+            // resolve most of the overlap gradually; what remains reads as squish
+            const corr = (minD - dist) * 0.35 * relax;
+            A.x -= ux * corr; B.x += ux * corr;
+            A.y = Math.min(Math.max(A.y - uy * corr, -bound), bound);
+            B.y = Math.min(Math.max(B.y + uy * corr, -bound), bound);
+            A.px -= ux * corr; A.py -= uy * corr;
+            B.px += ux * corr; B.py += uy * corr;
+            // steer travel apart so head-on pairs slide off each other
+            A.dx -= ux * depth * dt * 2; A.dy -= uy * depth * dt * 2;
+            B.dx += ux * depth * dt * 2; B.dy += uy * depth * dt * 2;
+          }
+          A.sqx += ux * depth; A.sqy += uy * depth;
+          B.sqx -= ux * depth; B.sqy -= uy * depth;
+          A.sqa = Math.min(A.sqa + depth, 1); B.sqa = Math.min(B.sqa + depth, 1);
+        }
+        if (!C.blobStatic) for (const b of blobs) {
+          const m = Math.hypot(b.dx, b.dy) || 1;   // steering must not change speed
+          b.dx /= m; b.dy /= m;
+        }
+      }
+      for (let i = 0; i < blobs.length; i++) {
+        const b = blobs[i];
+        posData[i * 4] = b.px;
+        posData[i * 4 + 1] = b.py;
+        posData[i * 4 + 2] = b.rad;
+        posData[i * 4 + 3] = b.phase;      // per-blob shape seed
+        const m = Math.hypot(b.sqx, b.sqy);
+        squishData[i * 4] = m > 1e-4 ? b.sqx / m : 0;
+        squishData[i * 4 + 1] = m > 1e-4 ? b.sqy / m : 0;
+        squishData[i * 4 + 2] = Math.min(b.sqa * C.blobSquish, 1);
+        // the light swings toward each blob's direction of travel and eases
+        // back to the global source when the blob rests
+        const mvx = (b.px - b.lastPx) / Math.max(dt, 1e-3);
+        const mvy = (b.py - b.lastPy) / Math.max(dt, 1e-3);
+        b.lastPx = b.px; b.lastPy = b.py;
+        const sp = Math.hypot(mvx, mvy);
+        let tx = -0.5547, ty = 0.8321;
+        if (sp > 0.005) {
+          const k = Math.min(sp / 0.2, 1) * 0.85;
+          tx = tx * (1 - k) + (mvx / sp) * k;
+          ty = ty * (1 - k) + (mvy / sp) * k;
+        }
+        const ease = 1 - Math.exp(-dt * 3);
+        b.lx += (tx - b.lx) * ease;
+        b.ly += (ty - b.ly) * ease;
+        squishData[i * 4 + 3] = Math.atan2(b.ly, b.lx);
+      }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.useProgram(prog);
       gl.uniform2f(U('uRes'), canvas.width, canvas.height);
       gl.uniform1f(U('uTime'), simT);
       gl.uniform4fv(U('uBlobs'), posData);
+      gl.uniform4fv(U('uSquish'), squishData);
       gl.uniform3fv(U('uBlobCols'), colData);
       gl.uniform1i(U('uNB'), C.blobsOn ? blobs.length : 0);   // blobs off -> pure gradient
       gl.uniform1f(U('uSoftK'), 3.0 / Math.max(C.edgeSoftness, 0.05));
       gl.uniform1f(U('uOpacity'), C.opacity);
       gl.uniform1f(U('uAngle'), C.gradientAngle * Math.PI / 180);
       gl.uniform1f(U('uEdgeBlur'), C.edgeBlur);
+      gl.uniform1f(U('uSplit'), C.rgbSplit);
+      gl.uniform1f(U('uSat'), C.saturation);
+      gl.uniform1f(U('uShapeAmt'), C.blobShape);
+      // flood ramps in over the last 10% of the fill slider: at the endpoint
+      // the blob blend covers every pixel of the frame
+      gl.uniform1f(U('uFlood'), Math.min(Math.max((C.fillLevel - 0.9) * 10, 0), 1));
       gl.uniform1f(U('uLevel'), level);
       gl.uniform1f(U('uBSoft'), Math.max(C.boundarySoft, 0.003));
       gl.uniform1f(U('uLineA'), C.surfaceLine);
@@ -1976,6 +2144,7 @@ function createEffect(canvas, C) {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // ---- web overlay on top ----
       if (C.webOn) {
+        const wx = C.webX || 0, wy = C.webY || 0;   // web position (drag to move)
 
         yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
         pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
@@ -2012,7 +2181,7 @@ function createEffect(canvas, C) {
           if (i === dragIdx) {
             // hard constraint: dragged node follows the pointer in its depth plane
             const view = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-            const target = invRot([dragTarget[0] / Math.max(n.s, 0.3), dragTarget[1] / Math.max(n.s, 0.3), view[2]]);
+            const target = invRot([(dragTarget[0] - wx) / Math.max(n.s, 0.3), (dragTarget[1] - wy) / Math.max(n.s, 0.3), view[2]]);
             n.disp[0] = target[0] - n.rest[0]; n.disp[1] = target[1] - n.rest[1]; n.disp[2] = target[2] - n.rest[2];
             n.vel = [0, 0, 0];
             continue;
@@ -2031,7 +2200,7 @@ function createEffect(canvas, C) {
           const n = nodes[i];
           const v = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
           const s = persp / Math.max(persp - v[2], 0.4);
-          n.px = v[0] * s; n.py = v[1] * s; n.s = s;
+          n.px = v[0] * s + wx; n.py = v[1] * s + wy; n.s = s;
           n.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
           n.z = v[2];
           order.push(i);
@@ -2090,6 +2259,489 @@ function createEffect(canvas, C) {
 </script>
 <script id="asset-tidebg" type="text/plain"></script>
 
+<!-- ============================================================
+     ENGINE: SILK — a photographic soft gradient built from a few
+     art-directed colour anchors (normalized gaussian blend = full
+     coverage), cloud-warped boundaries, and long anisotropic light
+     streaks screen-blended on top. Anchors lean gently toward the
+     cursor; streaks shimmer on their own slow clocks.
+     ============================================================ -->
+<script id="engine-silk" type="text/plain">
+function createEffect(canvas, C) {
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' });
+  const VS = `#version 300 es
+  void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
+  const FS = `#version 300 es
+  precision highp float;
+  uniform vec2 uRes;
+  uniform float uTime, uSoftK, uWarp, uWScale, uGrain, uSeed;
+  uniform vec4 uAnchors[6];     // x, y, radius, -
+  uniform vec3 uACols[6];
+  uniform int uNA;
+  uniform vec3 uBase;
+  uniform int uStreakN;
+  uniform float uStreakAngle, uStreakW, uStreakLen, uStreakI, uShimmer;
+  uniform vec3 uStreakCol;
+  uniform float uLevel, uBSoft, uLineA;
+  uniform vec3 uLineCol;
+  out vec4 o;
+  float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x),
+               mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y);
+  }
+  float fbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 3; i++) { v += a * vnoise(p); p *= 2.03; a *= 0.5; }
+    return v;
+  }
+  void main() {
+    vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / (0.5 * min(uRes.x, uRes.y));
+    // cloud-soft domain warp: boundaries between colour masses wander like
+    // out-of-focus weather rather than sitting on clean curves
+    vec2 w = vec2(fbm(p * uWScale + uTime * 0.012),
+                  fbm(p * uWScale + 7.31 - uTime * 0.009));
+    vec2 q = p + (w - 0.5) * uWarp;
+    // normalized soft-anchor blend: defined at every pixel, so the gradient
+    // always covers the frame with photographic softness
+    vec3 acc = uBase * 0.03;
+    float wsum = 0.03;
+    for (int i = 0; i < 6; i++) {
+      if (i >= uNA) break;
+      vec2 d = q - uAnchors[i].xy;
+      float r = max(uAnchors[i].z, 1e-3);
+      float wgt = exp(-dot(d, d) / (r * r) * uSoftK);
+      acc += uACols[i] * wgt;
+      wsum += wgt;
+    }
+    vec3 col = acc / wsum;
+    // boundary: the gradient pools below an adjustable waterline — above it
+    // only the base colour remains (fill 1 floods the whole frame)
+    float mask = smoothstep(uLevel + uBSoft, uLevel - uBSoft, p.y);
+    col = mix(uBase, col, mask);
+    // light streaks: long anisotropic shafts along one axis, screen-blended
+    // so they glow into the gradient without ever clipping to white
+    vec3 glow = vec3(0.0);
+    vec2 sdir = vec2(cos(uStreakAngle), sin(uStreakAngle));
+    vec2 sperp = vec2(-sdir.y, sdir.x);
+    for (int i = 0; i < 6; i++) {
+      if (i >= uStreakN) break;
+      float h1 = fract(sin(float(i) * 12.9898 + uSeed * 0.731) * 43758.5453123);
+      float h2 = fract(h1 * 91.17);
+      float off = (h1 - 0.5) * 1.7;
+      float wob = sin(uTime * uShimmer + h2 * 6.28318) * 0.05;
+      float across = dot(q, sperp) - off - wob;
+      float along = dot(p, sdir) - (h2 - 0.5) * 0.6;
+      float wd = uStreakW * (0.6 + h2 * 0.9);
+      float body = exp(-across * across / (wd * wd));
+      float ends = exp(-along * along * uStreakLen);
+      float tw = 0.85 + 0.15 * sin(uTime * (uShimmer * 0.7 + 0.2) + h1 * 9.42);
+      glow += uStreakCol * body * ends * tw * uStreakI * (0.55 + 0.45 * h2);
+    }
+    col = 1.0 - (1.0 - col) * (1.0 - min(glow, vec3(0.95)) * mask);
+    // optional hairline right at the waterline
+    float ln = 1.0 - smoothstep(0.004, 0.016, abs(p.y - uLevel));
+    col = mix(col, uLineCol, ln * uLineA);
+    // film grain doubling as dither: kills banding on the long soft ramps
+    float g = h21(gl_FragCoord.xy * 0.7 + fract(uTime) * 13.1);
+    col += (g - 0.5) * (0.012 + uGrain * 0.05);
+    o = vec4(clamp(col, 0.0, 1.0), 1.0);
+  }`;
+  const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const U = n => gl.getUniformLocation(prog, n);
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+
+  // art-directed anchor layout echoing the reference photograph:
+  // cool masses up top, a warm core, soft light below, one hot corner
+  const BASE = [
+    [-0.45, 0.95, 1.05],
+    [0.60, 0.95, 0.95],
+    [0.05, -0.10, 0.75],
+    [0.90, 0.05, 0.70],
+    [-0.15, -0.85, 0.85],
+    [-0.95, -1.05, 0.55],
+  ];
+  const anchorData = new Float32Array(6 * 4);
+  const colData = new Float32Array(6 * 3);
+
+  // ==================== web overlay (mirrors the web shader) ====================
+
+  const VS_LINE = `#version 300 es
+  layout(location=0) in vec2 corner;    // x: 0..1 along, y: -1..1 across
+  layout(location=1) in vec4 iSeg;      // ax, ay, bx, by (unit space)
+  layout(location=2) in vec2 iMeta;     // width px, alpha
+  uniform vec2 uRes;
+  out float vAcross; out float vHalfPx; out float vAlpha;
+  void main() {
+    vec2 a = iSeg.xy, b = iSeg.zw;
+    vec2 dir = normalize(b - a + 1e-6);
+    vec2 perp = vec2(-dir.y, dir.x);
+    float scale = 0.5 * min(uRes.x, uRes.y);
+    float halfU = (iMeta.x * 0.5 + 1.0) / scale;
+    vec2 p = mix(a, b, corner.x) + perp * halfU * corner.y;
+    gl_Position = vec4(p * scale / (0.5 * uRes), 0.0, 1.0);
+    vAcross = corner.y * (iMeta.x * 0.5 + 1.0);
+    vHalfPx = iMeta.x * 0.5;
+    vAlpha = iMeta.y;
+  }`;
+  const FS_LINE = `#version 300 es
+  precision highp float;
+  in float vAcross; in float vHalfPx; in float vAlpha;
+  uniform vec3 uColor;
+  out vec4 o;
+  void main() {
+    float edge = smoothstep(vHalfPx + 0.7, max(vHalfPx - 0.7, 0.0), abs(vAcross));
+    o = vec4(uColor, edge * vAlpha);
+  }`;
+  const VS_DOT = `#version 300 es
+  layout(location=0) in vec2 corner;    // -1..1
+  layout(location=1) in vec4 iDot;      // x, y, size px, alpha
+  uniform vec2 uRes;
+  out vec2 vLocal; out float vSize; out float vAlpha;
+  void main() {
+    float scale = 0.5 * min(uRes.x, uRes.y);
+    float rU = (iDot.z * 0.5 + 1.5) / scale;
+    vec2 p = iDot.xy + corner * rU;
+    gl_Position = vec4(p * scale / (0.5 * uRes), 0.0, 1.0);
+    vLocal = corner * (iDot.z * 0.5 + 1.5);
+    vSize = iDot.z * 0.5;
+    vAlpha = iDot.w;
+  }`;
+  const FS_DOT = `#version 300 es
+  precision highp float;
+  in vec2 vLocal; in float vSize; in float vAlpha;
+  uniform vec3 uColor; uniform float uShape;
+  out vec4 o;
+  void main() {
+    vec2 q = vLocal;
+    float d;
+    if (uShape < 0.5)      d = length(q) - vSize;                    // circle
+    else if (uShape < 1.5) d = max(abs(q.x), abs(q.y)) - vSize;      // square
+    else if (uShape < 2.5) d = (abs(q.x) + abs(q.y)) * 0.82 - vSize; // diamond
+    else                   d = abs(length(q) - vSize * 0.75) - vSize * 0.28; // ring
+    o = vec4(uColor, smoothstep(0.8, -0.8, d) * vAlpha);
+  }`;
+  function wProgram(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    return p;
+  }
+  const wProgLine = wProgram(VS_LINE, FS_LINE);
+  const wProgDot = wProgram(VS_DOT, FS_DOT);
+  const WU = (p, n) => gl.getUniformLocation(p, n);
+
+  const MAX_N = 400, MAX_E = MAX_N * 4;
+  const segData = new Float32Array(MAX_E * 4);
+  const segMeta = new Float32Array(MAX_E * 2);
+  const dotData = new Float32Array(MAX_N * 4);
+  function wMakeVao(corners, instances) {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const cBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, corners, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    for (const it of instances) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, it.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, it.bytes, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(it.loc);
+      gl.vertexAttribPointer(it.loc, it.size, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(it.loc, 1);
+    }
+    gl.bindVertexArray(null);
+    return vao;
+  }
+  const segBuf = gl.createBuffer(), segMetaBuf = gl.createBuffer(), dotBuf = gl.createBuffer();
+  const wVaoLine = wMakeVao(new Float32Array([0,-1, 1,-1, 0,1, 1,1]),
+    [{ buf: segBuf, bytes: segData.byteLength, loc: 1, size: 4 },
+     { buf: segMetaBuf, bytes: segMeta.byteLength, loc: 2, size: 2 }]);
+  const wVaoDot = wMakeVao(new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),
+    [{ buf: dotBuf, bytes: dotData.byteLength, loc: 1, size: 4 }]);
+
+  // ---- web structure: nodes on an irregular blob shell + k-nearest links ----
+  let nodes = [], edges = [], maxR = 1;
+  function rebuildWeb() {
+    const hash = n => { const x = Math.sin(n + C.seed * 1013.7) * 43758.5453123; return x - Math.floor(x); };
+    const N = Math.min(Math.round(C.webCount), MAX_N);
+    const GA = 2.39996322973;
+    const ph1 = hash(1) * 6.28, ph2 = hash(2) * 6.28, ph3 = hash(3) * 6.28;
+    nodes = [];
+    for (let i = 0; i < N; i++) {
+      let z = 1 - 2 * (i + 0.5) / N;
+      z = Math.min(Math.max(z + (hash(i * 7.1) - 0.5) * 0.2, -0.99), 0.99);
+      const th = i * GA + hash(i * 3.3) * 0.9;
+      const s = Math.sqrt(1 - z * z);
+      const dx = s * Math.cos(th), dy = s * Math.sin(th), dz = z;
+      // irregular blob: radius modulated by seeded low-frequency waves
+      const mod = 1 + C.webIrregularity * (0.45 * Math.sin(3.1 * dx + ph1)
+        + 0.35 * Math.sin(4.2 * dy + ph2) + 0.25 * Math.sin(5.3 * dz + ph3));
+      const r = C.webRadius * mod * (0.82 + 0.18 * hash(i * 11.7));
+      nodes.push({ rest: [dx * r, dy * r, dz * r], disp: [0, 0, 0], vel: [0, 0, 0], px: 0, py: 0, s: 1 });
+    }
+    maxR = C.webRadius * (1 + C.webIrregularity);
+    // k-nearest links
+    const k = Math.round(C.linksPerNode);
+    const set = new Set();
+    edges = [];
+    for (let i = 0; i < N; i++) {
+      const d2 = [];
+      for (let j = 0; j < N; j++) {
+        if (j === i) continue;
+        const a = nodes[i].rest, b = nodes[j].rest;
+        d2.push([(a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2, j]);
+      }
+      d2.sort((x, y) => x[0] - y[0]);
+      for (let m2 = 0; m2 < k && m2 < d2.length; m2++) {
+        const j = d2[m2][1];
+        const key = i < j ? i * MAX_N + j : j * MAX_N + i;
+        if (set.has(key)) continue;
+        set.add(key);
+        edges.push({ a: i, b: j, len: Math.sqrt(d2[m2][0]) });
+      }
+    }
+  }
+  rebuildWeb();
+
+  // ---- interaction: drag a node, drag space to rotate, or move the web ----
+  let yaw = 0.5, yawTarget = 0.5, pitch = -0.25, pitchTarget = -0.25;
+  let dragIdx = -1, rotating = false, movingWeb = false;
+  let spinDir = 1, tiltDir = 1;      // idle rotation follows the last drag direction
+  let lastU = [0, 0], dragTarget = [0, 0];
+  const toUnit = ev => {
+    const r = canvas.getBoundingClientRect();
+    return [((ev.clientX - r.left) / r.width - 0.5) * 2, (0.5 - (ev.clientY - r.top) / r.height) * 2];
+  };
+  canvas.addEventListener('pointerdown', ev => {
+    const u = toUnit(ev);
+    if (C.webOn && C.webDrag) {            // reposition mode: drag the whole web
+      movingWeb = true;
+      lastU = u;
+      canvas.setPointerCapture(ev.pointerId);
+      return;
+    }
+    let best = -1, bestD = 0.09;
+    for (let i = 0; i < nodes.length; i++) {
+      const d = Math.hypot(nodes[i].px - u[0], nodes[i].py - u[1]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best >= 0) { dragIdx = best; dragTarget = u; }
+    else rotating = true;
+    lastU = u;
+    canvas.setPointerCapture(ev.pointerId);
+  });
+  canvas.addEventListener('pointermove', ev => {
+    const u = toUnit(ev);
+    if (movingWeb) {
+      C.webX = (C.webX || 0) + (u[0] - lastU[0]);
+      C.webY = (C.webY || 0) + (u[1] - lastU[1]);
+      lastU = u;
+      return;
+    }
+    const dxu = u[0] - lastU[0], dyu = u[1] - lastU[1];
+    if (dragIdx >= 0 || rotating) {
+      // the idle spin continues in whichever direction you dragged
+      if (Math.abs(dxu) > 0.001) spinDir = dxu > 0 ? 1 : -1;
+      if (Math.abs(dyu) > 0.001) tiltDir = dyu > 0 ? -1 : 1;
+    }
+    if (dragIdx >= 0) {
+      dragTarget = u;
+      // pulling a node tows the whole web around both rotation axes
+      const g = C.dragSwing / Math.max(nodes[dragIdx].s, 0.4);
+      yawTarget += dxu * g;
+      pitchTarget -= dyu * g;
+    } else if (rotating) {
+      yawTarget += dxu * 2.6;
+      pitchTarget -= dyu * 2.6;
+    }
+    lastU = u;
+  });
+  const release = () => { dragIdx = -1; rotating = false; movingWeb = false; };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+
+  let simT = 0, cx = 0, cy = 0;
+  return {
+    rebuild() { rebuildWeb(); },
+    frame(dt, mouse) {
+      if (!C.silkStatic) simT += dt;
+      // smoothed cursor sway: anchors lean toward the pointer, deeper ones less
+      const near = Math.hypot(mouse[0], mouse[1]) < 5;
+      const ke = 1 - Math.exp(-dt * 3);
+      cx += ((near ? mouse[0] : 0) - cx) * ke;
+      cy += ((near ? mouse[1] : 0) - cy) * ke;
+      const hash = n => { const x = Math.sin(n * 127.1 + C.seed * 311.7) * 43758.5453123; return x - Math.floor(x); };
+      const n = Math.min(Math.max(Math.round(C.anchorCount), 3), 6);
+      const t = simT * C.driftSpeed;
+      for (let i = 0; i < n; i++) {
+        const [bx, by, br] = BASE[i];
+        const j1 = hash(i * 7.3 + 1) - 0.5, j2 = hash(i * 7.3 + 2) - 0.5;
+        const ph = hash(i * 7.3 + 3) * 6.28318;
+        const dx = Math.sin(t * 0.21 + ph) * 0.09 + Math.sin(t * 0.07 + ph * 2.7) * 0.05;
+        const dy = Math.cos(t * 0.17 + ph * 1.3) * 0.09;
+        const sway = 0.06 * (1 - i * 0.12);
+        anchorData[i * 4] = bx + j1 * 0.3 + dx + cx * sway;
+        anchorData[i * 4 + 1] = by + j2 * 0.3 + dy + cy * sway;
+        anchorData[i * 4 + 2] = br * C.spread * (0.85 + hash(i * 7.3 + 4) * 0.3);
+        anchorData[i * 4 + 3] = 0;
+        const rgb = hex(C['color' + (i + 1)]);
+        colData[i * 3] = rgb[0]; colData[i * 3 + 1] = rgb[1]; colData[i * 3 + 2] = rgb[2];
+      }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(prog);
+      gl.uniform2f(U('uRes'), canvas.width, canvas.height);
+      gl.uniform1f(U('uTime'), simT);
+      gl.uniform4fv(U('uAnchors'), anchorData);
+      gl.uniform3fv(U('uACols'), colData);
+      gl.uniform1i(U('uNA'), n);
+      gl.uniform3f(U('uBase'), ...hex(C.baseColor));
+      gl.uniform1f(U('uSoftK'), 2.2 / Math.max(C.softness, 0.05));
+      gl.uniform1f(U('uWarp'), C.warp);
+      gl.uniform1f(U('uWScale'), C.warpScale);
+      gl.uniform1f(U('uGrain'), C.grain);
+      gl.uniform1f(U('uSeed'), C.seed);
+      gl.uniform1i(U('uStreakN'), Math.round(C.streakCount));
+      gl.uniform1f(U('uStreakAngle'), C.streakAngle * Math.PI / 180);
+      gl.uniform1f(U('uStreakW'), C.streakWidth);
+      gl.uniform1f(U('uStreakLen'), 1 / (C.streakLen * C.streakLen));
+      gl.uniform1f(U('uStreakI'), C.streakIntensity);
+      gl.uniform1f(U('uShimmer'), C.shimmer);
+      gl.uniform3f(U('uStreakCol'), ...hex(C.streakTint));
+      // waterline: fill 1 lifts the line plus its soft edge above the frame
+      gl.uniform1f(U('uLevel'), -1 + C.fillLevel * (2 + C.boundarySoft * 2 + 0.1));
+      gl.uniform1f(U('uBSoft'), Math.max(C.boundarySoft, 0.003));
+      gl.uniform1f(U('uLineA'), C.surfaceLine);
+      gl.uniform3f(U('uLineCol'), ...hex(C.surfaceColor));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // ---- web overlay on top ----
+      if (C.webOn) {
+        const wx = C.webX || 0, wy = C.webY || 0;   // web position (drag to move)
+
+        yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
+        pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
+        const chase = 1 - Math.exp(-dt * C.swingDelay);
+        yaw += (yawTarget - yaw) * chase;
+        pitch += (pitchTarget - pitch) * chase;
+        const cy2 = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        // R = Ry(yaw) * Rx(pitch); columns for model->view
+        const rot = m => {
+          const y1 = m[1] * cp - m[2] * sp, z1 = m[1] * sp + m[2] * cp;
+          return [m[0] * cy2 + z1 * sy, y1, -m[0] * sy + z1 * cy2];
+        };
+        const invRot = v => {           // transpose
+          const x1 = v[0] * cy2 - v[2] * sy, z1 = v[0] * sy + v[2] * cy2;
+          return [x1, v[1] * cp + z1 * sp, -v[1] * sp + z1 * cp];
+        };
+
+        // ---- spring physics in model space ----
+        const kWeb = C.webStiffness, kSnap = C.snapStiffness;
+        const wDamp = Math.exp(-C.snapDamping * dt);
+        for (const e of edges) {
+          const A = nodes[e.a], B = nodes[e.b];
+          const ax = A.rest[0] + A.disp[0], ay = A.rest[1] + A.disp[1], az = A.rest[2] + A.disp[2];
+          const bx = B.rest[0] + B.disp[0], by = B.rest[1] + B.disp[1], bz = B.rest[2] + B.disp[2];
+          let dx = ax - bx, dy = ay - by, dz = az - bz;
+          const len = Math.max(Math.hypot(dx, dy, dz), 1e-5);
+          const f = kWeb * (len - e.len) / len * dt;
+          dx *= f; dy *= f; dz *= f;
+          A.vel[0] -= dx; A.vel[1] -= dy; A.vel[2] -= dz;
+          B.vel[0] += dx; B.vel[1] += dy; B.vel[2] += dz;
+        }
+        for (let i = 0; i < nodes.length; i++) {
+          const nd = nodes[i];
+          if (i === dragIdx) {
+            // hard constraint: dragged node follows the pointer in its depth plane
+            const view = rot([nd.rest[0] + nd.disp[0], nd.rest[1] + nd.disp[1], nd.rest[2] + nd.disp[2]]);
+            const target = invRot([(dragTarget[0] - wx) / Math.max(nd.s, 0.3), (dragTarget[1] - wy) / Math.max(nd.s, 0.3), view[2]]);
+            nd.disp[0] = target[0] - nd.rest[0]; nd.disp[1] = target[1] - nd.rest[1]; nd.disp[2] = target[2] - nd.rest[2];
+            nd.vel = [0, 0, 0];
+            continue;
+          }
+          for (let a = 0; a < 3; a++) {
+            nd.vel[a] -= nd.disp[a] * kSnap * dt;   // snap home -> core stays fixed
+            nd.vel[a] *= wDamp;
+            nd.disp[a] += nd.vel[a] * dt;
+          }
+        }
+
+        // ---- project, depth-sort, fill instance buffers ----
+        const persp = C.perspective;
+        const order = [];
+        for (let i = 0; i < nodes.length; i++) {
+          const nd = nodes[i];
+          const v = rot([nd.rest[0] + nd.disp[0], nd.rest[1] + nd.disp[1], nd.rest[2] + nd.disp[2]]);
+          const s = persp / Math.max(persp - v[2], 0.4);
+          nd.px = v[0] * s + wx; nd.py = v[1] * s + wy; nd.s = s;
+          nd.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
+          nd.z = v[2];
+          order.push(i);
+        }
+        order.sort((a, b) => nodes[a].z - nodes[b].z);           // far first
+        const eOrder = edges.map((e, i) => i)
+          .sort((a, b) => (nodes[edges[a].a].z + nodes[edges[a].b].z) - (nodes[edges[b].a].z + nodes[edges[b].b].z));
+
+        const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
+        const fade = C.depthFade, dSize = C.depthShrink;
+        let nE = 0;
+        for (const ei of eOrder) {
+          const e = edges[ei], A = nodes[e.a], B = nodes[e.b];
+          const depth = (A.depth + B.depth) * 0.5;
+          segData[nE * 4] = A.px; segData[nE * 4 + 1] = A.py;
+          segData[nE * 4 + 2] = B.px; segData[nE * 4 + 3] = B.py;
+          segMeta[nE * 2] = C.lineWidth * (1 - dSize * (1 - depth)) * dprScale;
+          segMeta[nE * 2 + 1] = C.lineOpacity * (1 - fade * (1 - depth));
+          nE++;
+        }
+        let nD = 0;
+        for (const i of order) {
+          const nd = nodes[i];
+          dotData[nD * 4] = nd.px; dotData[nD * 4 + 1] = nd.py;
+          dotData[nD * 4 + 2] = C.nodeSize * (1 - dSize * (1 - nd.depth)) * nd.s * dprScale;
+          dotData[nD * 4 + 3] = 1 - fade * (1 - nd.depth);
+          nD++;
+        }
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.useProgram(wProgLine);
+        gl.uniform2f(WU(wProgLine, 'uRes'), canvas.width, canvas.height);
+        gl.uniform3f(WU(wProgLine, 'uColor'), ...hex(C.lineColor));
+        gl.bindVertexArray(wVaoLine);
+        gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData.subarray(0, nE * 4));
+        gl.bindBuffer(gl.ARRAY_BUFFER, segMetaBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segMeta.subarray(0, nE * 2));
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nE);
+
+        gl.useProgram(wProgDot);
+        gl.uniform2f(WU(wProgDot, 'uRes'), canvas.width, canvas.height);
+        gl.uniform3f(WU(wProgDot, 'uColor'), ...hex(C.nodeColor));
+        gl.uniform1f(WU(wProgDot, 'uShape'), Math.round(C.nodeShape));
+        gl.bindVertexArray(wVaoDot);
+        gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData.subarray(0, nD * 4));
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nD);
+        gl.bindVertexArray(null);
+        gl.disable(gl.BLEND);
+      }
+    },
+  };
+}
+</script>
+
 <script>
 'use strict';
 // ============================================================ REGISTRY
@@ -2136,6 +2788,7 @@ const EFFECTS = {
     },
     GROUPS: [
       ['Background media', [
+        ['background color', 'ring4', 'color'],
         ['upload image / video', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
         ['rotate media', 'imageRotate', 'rot'],
@@ -2152,7 +2805,6 @@ const EFFECTS = {
         ['ring 1 color (center)', 'ring1', 'color'],
         ['ring 2 color', 'ring2', 'color'],
         ['ring 3 color', 'ring3', 'color'],
-        ['ring 4 color (outer)', 'ring4', 'color'],
         ['ring 1 ends at', 'ringEnd1', 0.02, 0.9, 0.01],
         ['ring 2 ends at', 'ringEnd2', 0.05, 0.95, 0.01],
         ['ring 3 ends at', 'ringEnd3', 0.1, 1.0, 0.01],
@@ -2236,6 +2888,8 @@ const EFFECTS = {
     },
     GROUPS: [
       ['Background media', [
+        ['background top', 'bg', 'color'],
+        ['background bottom', 'bg2', 'color'],
         ['upload image / video', 'imageUpload', 'file'],
         ['show media', 'imageOn', 'check'],
         ['rotate media', 'imageRotate', 'rot'],
@@ -2249,8 +2903,6 @@ const EFFECTS = {
         ['blob size', 'blobSize', 0.05, 0.8, 0.005],
       ]],
       ['Color steps', [
-        ['background top', 'bg', 'color'],
-        ['background bottom', 'bg2', 'color'],
         ['band count', 'bandCount', 2, 8, 1],
         ['band 1 (outer)', 'color1', 'color'],
         ['band 2', 'color2', 'color'],
@@ -2471,10 +3123,17 @@ const EFFECTS = {
       blobColor4: c => c.blobsOn && c.paletteCount >= 4,
       blobColor5: c => c.blobsOn && c.paletteCount >= 5,
       blobColor6: c => c.blobsOn && c.paletteCount >= 6,
+      blobColor7: c => c.blobsOn && c.paletteCount >= 7,
+      blobColor8: c => c.blobsOn && c.paletteCount >= 8,
+      blobColor9: c => c.blobsOn && c.paletteCount >= 9,
+      blobColor10: c => c.blobsOn && c.paletteCount >= 10,
       fillLevel: c => c.blobsOn,
       boundarySoft: c => c.blobsOn,
       surfaceLine: c => c.blobsOn,
       surfaceColor: c => c.blobsOn && c.surfaceLine > 0,
+      rgbSplit: c => c.blobsOn,
+      blobShape: c => c.blobsOn,
+      blobSquish: c => c.blobsOn,
       blobStatic: c => c.blobsOn,
       speed: c => c.blobsOn && !c.blobStatic,
       colorDrift: c => c.blobsOn && !c.blobStatic,
@@ -2484,6 +3143,7 @@ const EFFECTS = {
       imageZoom: c => c.imageOn,
       imageFlip: c => c.imageOn,
       imageOpacity: c => c.imageOn,
+      webDrag: c => c.webOn,
       webCount: c => c.webOn,
       webRadius: c => c.webOn,
       webIrregularity: c => c.webOn,
@@ -2535,18 +3195,19 @@ const EFFECTS = {
     },
     DEFAULTS: {
       blobsOn: true,
-      count: 7, seed: 0, size: 0.34, sizeVariation: 0.45,
-      edgeSoftness: 1.2, opacity: 0.9,
+      count: 7, seed: 0, size: 0.34, sizeVariation: 0.45, blobShape: 0, blobSquish: 0.65,
+      edgeSoftness: 1.2, opacity: 0.9, saturation: 1,
       palettePreset: 0, paletteCount: 5,
       blobColor1: '#f9b85f', blobColor2: '#ffd9ec', blobColor3: '#b6d9ff',
       blobColor4: '#ffb37a', blobColor5: '#ffe3a3', blobColor6: '#ff6b35',
-      colorDrift: 0.05, driftSpeed: 0.25,
+      blobColor7: '#d9ccb0', blobColor8: '#c9b8ff', blobColor9: '#c9f0d8', blobColor10: '#ff8fb3',
+      colorDrift: 0.05, driftSpeed: 0.25, rgbSplit: 0,
       fillLevel: 0.45, boundarySoft: 0.08, surfaceLine: 0, surfaceColor: '#111111',
       bg1: '#ffffff', bg2: '#ffe9d6', gradientAngle: 270, edgeBlur: 0,
-      speed: 0.12, blobStatic: false,
+      speed: 0.2, blobStatic: false,
       imageOn: true, imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       cursorPull: 0.8, cursorRadius: 0.5, stiffness: 60, damping: 6,
-      webOn: true,
+      webOn: true, webDrag: false, webX: 0, webY: 0,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
       nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
       lineWidth: 1, lineOpacity: 0.65, lineColor: '#2a00ff',
@@ -2561,20 +3222,27 @@ const EFFECTS = {
         ['seed', 'seed', 0, 999, 1, 'rebuild'],
         ['size', 'size', 0.05, 0.9, 0.005],
         ['size variation', 'sizeVariation', 0, 0.9, 0.01],
+        ['shape irregularity', 'blobShape', 0, 1, 0.01],
+        ['collision squish', 'blobSquish', 0, 1, 0.01],
         ['edge softness', 'edgeSoftness', 0.2, 3, 0.05],
         ['opacity', 'opacity', 0.1, 1, 0.01],
       ]],
       ['Blob colors', [
         ['preset', 'palettePreset', 'seg', ['dawn', 'dusk', 'moss', 'mono']],
-        ['palette count', 'paletteCount', 1, 6, 1],
+        ['palette count', 'paletteCount', 1, 10, 1],
         ['color 1', 'blobColor1', 'color'],
         ['color 2', 'blobColor2', 'color'],
         ['color 3', 'blobColor3', 'color'],
         ['color 4', 'blobColor4', 'color'],
         ['color 5', 'blobColor5', 'color'],
         ['color 6', 'blobColor6', 'color'],
+        ['color 7', 'blobColor7', 'color'],
+        ['color 8', 'blobColor8', 'color'],
+        ['color 9', 'blobColor9', 'color'],
+        ['color 10', 'blobColor10', 'color'],
         ['color drift', 'colorDrift', 0, 0.2, 0.005],
         ['drift speed', 'driftSpeed', 0, 2, 0.01],
+        ['rgb edge split', 'rgbSplit', 0, 0.5, 0.005],
       ]],
       ['Boundary', [
         ['fill level', 'fillLevel', 0, 1, 0.005],
@@ -2598,10 +3266,12 @@ const EFFECTS = {
         ['color 1', 'bg1', 'color'],
         ['color 2', 'bg2', 'color'],
         ['gradient angle', 'gradientAngle', 0, 360, 1],
+        ['saturation', 'saturation', 0, 2, 0.01],
         ['frame edge blur', 'edgeBlur', 0, 0.8, 0.005],
       ]],
       ['Web structure', [
         ['web visible', 'webOn', 'check'],
+        ['draggable position', 'webDrag', 'check'],
         ['node count', 'webCount', 20, 400, 1, 'rebuild'],
         ['web radius', 'webRadius', 0.2, 1, 0.01, 'rebuild'],
         ['web irregularity', 'webIrregularity', 0, 1, 0.01, 'rebuild'],
@@ -2638,6 +3308,171 @@ const EFFECTS = {
         ['pull radius', 'cursorRadius', 0.05, 1.5, 0.01],
         ['spring stiffness', 'stiffness', 5, 300, 1],
         ['spring damping', 'damping', 0.5, 30, 0.25],
+      ]],
+      ['Performance', [
+        ['pixel ratio cap', 'dprCap', 0.5, 3, 0.25],
+        ['pause', 'paused', 'check'],
+      ]],
+    ],
+  },
+
+  silk: {
+    name: 'silk',
+    deps: {
+      color2: c => c.anchorCount >= 2,
+      color3: c => c.anchorCount >= 3,
+      color4: c => c.anchorCount >= 4,
+      color5: c => c.anchorCount >= 5,
+      color6: c => c.anchorCount >= 6,
+      streakAngle: c => c.streakCount > 0,
+      streakWidth: c => c.streakCount > 0,
+      streakLen: c => c.streakCount > 0,
+      streakIntensity: c => c.streakCount > 0,
+      streakTint: c => c.streakCount > 0,
+      shimmer: c => c.streakCount > 0,
+      driftSpeed: c => !c.silkStatic,
+      surfaceColor: c => c.surfaceLine > 0,
+      webDrag: c => c.webOn,
+      webCount: c => c.webOn,
+      webRadius: c => c.webOn,
+      webIrregularity: c => c.webOn,
+      linksPerNode: c => c.webOn,
+      nodeShape: c => c.webOn,
+      nodeSize: c => c.webOn,
+      nodeColor: c => c.webOn,
+      lineWidth: c => c.webOn,
+      lineOpacity: c => c.webOn,
+      lineColor: c => c.webOn,
+      perspective: c => c.webOn,
+      depthFade: c => c.webOn,
+      depthShrink: c => c.webOn,
+      snapStiffness: c => c.webOn,
+      snapDamping: c => c.webOn,
+      webStiffness: c => c.webOn,
+      autoSpin: c => c.webOn,
+      autoTilt: c => c.webOn,
+      dragSwing: c => c.webOn,
+      swingDelay: c => c.webOn,
+    },
+    hint: 'drag a web node to pull it · anchors lean toward your cursor',
+    openGroups: ['Gradient', 'Colors', 'Streaks'],
+    LAYOUT: [
+      { t: 'gradient', groups: ['Gradient', 'Colors'],
+        rename: { 'Gradient': 'field', 'Colors': 'colors' } },
+      { t: 'streaks', groups: ['Streaks'] },
+      { t: 'boundary', groups: ['Boundary'] },
+      { t: 'web', toggle: 'webOn', groups: ['Web structure', 'Web nodes', 'Web lines', 'Web depth', 'Web physics', 'Web motion'],
+        rename: { 'Web structure': 'structure', 'Web nodes': 'nodes', 'Web lines': 'lines', 'Web depth': 'depth', 'Web physics': 'physics', 'Web motion': 'motion' } },
+      { t: 'motion', groups: ['Motion'] },
+      { t: 'general', groups: ['Performance'] },
+    ],
+    bgKey: 'baseColor',
+    // palettes: dawnlight mirrors the reference photograph
+    presets: {
+      key: 'palettePreset',
+      options: [
+        { baseColor: '#f6e7da', color1: '#1747e0', color2: '#0f93ab', color3: '#ff8a00',
+          color4: '#ffc93c', color5: '#ffb6c8', color6: '#ff2fd2' },               // dawnlight
+        { baseColor: '#eef4fa', color1: '#0f2f8f', color2: '#2fa8c9', color3: '#8fd0e8',
+          color4: '#c9e6f4', color5: '#e3d3ff', color6: '#4a3d8f' },               // arctic
+        { baseColor: '#1a0e14', color1: '#3d1030', color2: '#7a1f3d', color3: '#ff5a2a',
+          color4: '#ffb347', color5: '#ff2f6e', color6: '#5c1b8f' },               // ember
+        { baseColor: '#f2f7e8', color1: '#2f7fa8', color2: '#7fae6e', color3: '#eef7b8',
+          color4: '#ffd9a0', color5: '#c9f0d8', color6: '#4d7c4a' },               // meadow
+      ],
+    },
+    DEFAULTS: {
+      anchorCount: 6, seed: 0, spread: 1, softness: 1.4,
+      warp: 0.35, warpScale: 1.6, grain: 0.12,
+      palettePreset: 0,
+      baseColor: '#f6e7da',
+      color1: '#1747e0', color2: '#0f93ab', color3: '#ff8a00',
+      color4: '#ffc93c', color5: '#ffb6c8', color6: '#ff2fd2',
+      streakCount: 3, streakAngle: 58, streakWidth: 0.16, streakLen: 1.2,
+      streakIntensity: 0.55, streakTint: '#fff3d8', shimmer: 0.4,
+      fillLevel: 1, boundarySoft: 0.08, surfaceLine: 0, surfaceColor: '#111111',
+      driftSpeed: 0.3, silkStatic: false,
+      webOn: true, webDrag: false, webX: 0, webY: 0,
+      webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
+      nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
+      lineWidth: 1, lineOpacity: 0.65, lineColor: '#2a00ff',
+      perspective: 2.2, depthFade: 0.75, depthShrink: 0.65,
+      snapStiffness: 40, snapDamping: 6, webStiffness: 25,
+      autoSpin: 0.15, autoTilt: 0, dragSwing: 1.2, swingDelay: 4,
+      dprCap: 2, paused: false,
+    },
+    GROUPS: [
+      ['Gradient', [
+        ['anchor count', 'anchorCount', 3, 6, 1],
+        ['seed', 'seed', 0, 999, 1],
+        ['color spread', 'spread', 0.5, 2, 0.01],
+        ['softness', 'softness', 0.3, 3, 0.05],
+        ['cloud warp', 'warp', 0, 0.8, 0.01],
+        ['warp scale', 'warpScale', 0.5, 6, 0.1],
+        ['grain', 'grain', 0, 1, 0.01],
+      ]],
+      ['Colors', [
+        ['background color', 'baseColor', 'color'],
+        ['preset', 'palettePreset', 'seg', ['dawnlight', 'arctic', 'ember', 'meadow']],
+        ['color 1', 'color1', 'color'],
+        ['color 2', 'color2', 'color'],
+        ['color 3', 'color3', 'color'],
+        ['color 4', 'color4', 'color'],
+        ['color 5', 'color5', 'color'],
+        ['color 6', 'color6', 'color'],
+      ]],
+      ['Streaks', [
+        ['streaks', 'streakCount', 0, 6, 1],
+        ['angle', 'streakAngle', 0, 180, 1],
+        ['width', 'streakWidth', 0.03, 0.5, 0.005],
+        ['length', 'streakLen', 0.2, 2.5, 0.05],
+        ['intensity', 'streakIntensity', 0, 1, 0.01],
+        ['tint', 'streakTint', 'color'],
+        ['shimmer', 'shimmer', 0, 2, 0.01],
+      ]],
+      ['Boundary', [
+        ['fill level', 'fillLevel', 0, 1, 0.005],
+        ['edge softness', 'boundarySoft', 0.005, 0.5, 0.005],
+        ['surface line', 'surfaceLine', 0, 1, 0.01],
+        ['line color', 'surfaceColor', 'color'],
+      ]],
+      ['Web structure', [
+        ['web visible', 'webOn', 'check'],
+        ['draggable position', 'webDrag', 'check'],
+        ['node count', 'webCount', 20, 400, 1, 'rebuild'],
+        ['web radius', 'webRadius', 0.2, 1, 0.01, 'rebuild'],
+        ['web irregularity', 'webIrregularity', 0, 1, 0.01, 'rebuild'],
+        ['links per node', 'linksPerNode', 1, 6, 1, 'rebuild'],
+      ]],
+      ['Web nodes', [
+        ['node shape', 'nodeShape', 'seg', ['●', '■', '◆', '○']],
+        ['node size', 'nodeSize', 1, 16, 0.5],
+        ['node color', 'nodeColor', 'color'],
+      ]],
+      ['Web lines', [
+        ['line thickness', 'lineWidth', 0.2, 5, 0.1],
+        ['line opacity', 'lineOpacity', 0.05, 1, 0.01],
+        ['line color', 'lineColor', 'color'],
+      ]],
+      ['Web depth', [
+        ['perspective', 'perspective', 1.2, 5, 0.05],
+        ['depth fade', 'depthFade', 0, 0.95, 0.01],
+        ['depth shrink', 'depthShrink', 0, 0.95, 0.01],
+      ]],
+      ['Web physics', [
+        ['snap stiffness', 'snapStiffness', 2, 200, 1],
+        ['snap damping', 'snapDamping', 0.5, 30, 0.25],
+        ['web pull', 'webStiffness', 0, 120, 1],
+      ]],
+      ['Web motion', [
+        ['auto spin', 'autoSpin', -1.5, 1.5, 0.01],
+        ['auto tilt (y)', 'autoTilt', -1.5, 1.5, 0.01],
+        ['drag swing', 'dragSwing', 0, 3, 0.05],
+        ['swing response', 'swingDelay', 0.5, 20, 0.25],
+      ]],
+      ['Motion', [
+        ['drift speed', 'driftSpeed', 0, 2, 0.01],
+        ['static (freeze)', 'silkStatic', 'check'],
       ]],
       ['Performance', [
         ['pixel ratio cap', 'dprCap', 0.5, 3, 0.25],
@@ -3472,8 +4307,9 @@ document.getElementById('dl-html').onclick = () => {
 let pngRequest = false;
 document.getElementById('dl-png').onclick = () => { pngRequest = true; };
 
-document.getElementById('dl-mp4').onclick = e => {
+document.querySelectorAll('.dl-mp4').forEach(el => el.onclick = e => {
   const btn = e.target;
+  const secs = Math.max(parseInt(btn.dataset.secs, 10) || 10, 1);
   if (btn.dataset.busy) return;
   const cv = document.getElementById('c');
   const stream = cv.captureStream(60);
@@ -3484,19 +4320,20 @@ document.getElementById('dl-mp4').onclick = e => {
   const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
   const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
   const chunks = [];
+  const orig = btn.textContent;
   rec.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
   rec.onstop = () => {
     const blob = new Blob(chunks, { type: mime });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${activeId}.${ext}`;
+    a.download = `${activeId}-${secs}s.${ext}`;
     a.click();
     URL.revokeObjectURL(a.href);
     delete btn.dataset.busy;
-    btn.textContent = '↓ MP4 · 10s';
+    btn.textContent = orig;
   };
   btn.dataset.busy = '1';
-  let left = 10;
+  let left = secs;
   btn.textContent = `rec ${left}s…`;
   const tick = setInterval(() => {
     left--;
@@ -3504,14 +4341,14 @@ document.getElementById('dl-mp4').onclick = e => {
     else clearInterval(tick);
   }, 1000);
   rec.start();
-  setTimeout(() => rec.stop(), 10000);
-};
+  setTimeout(() => rec.stop(), secs * 1000);
+});
 
 // export menu: instant downloads close it; MP4 stays open so the countdown is visible
 const exportMenu = document.getElementById('exportMenu');
 exportMenu.addEventListener('click', e => {
   const item = e.target.closest('.menuList button');
-  if (item && item.id !== 'dl-mp4') exportMenu.removeAttribute('open');
+  if (item && !item.classList.contains('dl-mp4')) exportMenu.removeAttribute('open');
 });
 document.addEventListener('click', e => {
   if (exportMenu.open && !exportMenu.contains(e.target)) exportMenu.removeAttribute('open');
