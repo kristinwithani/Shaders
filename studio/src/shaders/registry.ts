@@ -3,6 +3,8 @@ import lavaSrc from '../engines/lava.engine.js?raw';
 import pixelsSrc from '../engines/pixels.engine.js?raw';
 import particleSrc from '../engines/particle.engine.js?raw';
 import tideSrc from '../engines/tide.engine.js?raw';
+import silkSrc from '../engines/silk.engine.js?raw';
+import webSrc from '../engines/web.engine.js?raw';
 import bleedSrc from '../engines/bleed.engine.js?raw';
 // @ts-ignore -- extracted verbatim data module
 import { EFFECTS as EFFECTS_RAW } from './registry.data.js';
@@ -20,6 +22,8 @@ export const ENGINE_SOURCES: Record<ShaderId, string> = {
   pixels: pixelsSrc,
   particle: particleSrc,
   tide: tideSrc,
+  silk: silkSrc,
+  web: webSrc,
   bleed: bleedSrc,
 };
 

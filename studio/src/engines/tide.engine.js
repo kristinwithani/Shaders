@@ -5,10 +5,11 @@ function createEffect(canvas, C) {
   const FS = `#version 300 es
   precision highp float;
   uniform vec2 uRes;
-  uniform float uTime, uSoftK, uOpacity, uAngle, uEdgeBlur;
+  uniform float uTime, uSoftK, uOpacity, uAngle, uEdgeBlur, uFlood, uSplit, uSat, uShapeAmt;
   uniform float uLevel, uBSoft, uLineA;
   uniform vec3 uLineCol;
-  uniform vec4 uBlobs[12];      // x, y, radius, -
+  uniform vec4 uBlobs[12];      // x, y, radius, shape phase
+  uniform vec4 uSquish[12];     // contact dir x, y, amount, light angle
   uniform vec3 uBlobCols[12];
   uniform int uNB;
   uniform vec3 uBg1, uBg2;
@@ -44,13 +45,68 @@ function createEffect(canvas, C) {
     float bSoft = uBSoft + eb * 0.35;
     float softK = uSoftK / (1.0 + eb * 6.0);
     float mask = smoothstep(uLevel + bSoft, uLevel - bSoft, p.y);
+    vec3 acc = vec3(0.0);
+    vec3 wsum = vec3(0.0);
     for (int i = 0; i < 12; i++) {
       if (i >= uNB) break;
       vec2 d = p - uBlobs[i].xy;
       float r = max(uBlobs[i].z, 1e-3);
-      float a = exp(-dot(d, d) / (r * r) * softK);
-      col = mix(col, uBlobCols[i], a * uOpacity * mask);
+      // shape: seeded angular harmonics pull each blob away from a perfect
+      // disc; slow time terms make the silhouettes breathe
+      if (uShapeAmt > 0.0) {
+        float ang = atan(d.y, d.x);
+        float ph = uBlobs[i].w;
+        float w = sin(ang * 2.0 + ph + uTime * 0.10) * 0.5
+                + sin(ang * 3.0 - ph * 1.7 - uTime * 0.07) * 0.3
+                + sin(ang * 5.0 + ph * 2.3) * 0.2;
+        r *= 1.0 + uShapeAmt * w * 0.55;
+      }
+      // collision squish: the side pressed against a neighbour flattens,
+      // the far side bulges slightly — soft bodies, not overlapping ghosts
+      vec4 sq = uSquish[i];
+      if (sq.z > 0.001) {
+        float along = dot(d / max(length(d), 1e-4), sq.xy);
+        r *= 1.0 - sq.z * 0.5 * max(along, 0.0) + sq.z * 0.22 * max(-along, 0.0);
+      }
+      // rgb edge split: each channel sees a different blob radius, so the
+      // falloffs part into chromatic fringes where blob edges bleed together
+      float rr = r * (1.0 + uSplit * 1.2), rb = r * max(1.0 - uSplit * 1.2, 0.05);
+      vec3 a3 = vec3(exp(-dot(d, d) / (rr * rr) * softK),
+                     exp(-dot(d, d) / (r * r) * softK),
+                     exp(-dot(d, d) / (rb * rb) * softK));
+      col = mix(col, uBlobCols[i], a3 * uOpacity * mask);
+      // light: each blob carries its own light direction (swinging toward its
+      // travel); dispersion gathers on the lit limb like a moving body
+      // catching light on its leading edge
+      vec2 Li = vec2(cos(sq.w), sin(sq.w));
+      vec2 dir = d / max(length(d), 1e-4);
+      float lit = 0.30 + 0.70 * smoothstep(-0.35, 0.9, dot(dir, Li));
+      float aG = a3.g;
+      float band = aG * (1.0 - aG) * 4.0;      // peaks mid-falloff, dark at core and far field
+      vec3 spec = 0.5 + 0.5 * cos(6.28318 * ((1.0 - aG) * 0.75 + vec3(0.0, -0.33, -0.67)));
+      col += spec * band * band * lit * (uSplit * 1.5) * uOpacity * mask;
+      // specular flare near the lit edge, with a slim perpendicular glint —
+      // a lens-like flick that breathes slowly per blob
+      vec2 hp = uBlobs[i].xy + Li * r * 0.45;
+      vec2 hd = p - hp;
+      float fl = exp(-dot(hd, hd) / (r * r * 0.045));
+      float tw = 0.8 + 0.2 * sin(uTime * 1.1 + uBlobs[i].w * 3.7);
+      vec2 gx = vec2(Li.y, -Li.x);
+      float ga = dot(hd, gx), gb = dot(hd, Li);
+      float glint = exp(-(ga * ga / (r * r * 0.16) + gb * gb / (r * r * 0.004)));
+      col += (vec3(1.0, 0.98, 0.94) * fl * 0.55 + spec * glint * 0.35) * tw * uSplit * uOpacity * mask;
+      acc += uBlobCols[i] * (a3 + 1e-4);
+      wsum += a3 + 1e-4;
     }
+    // at the fill endpoint the pool floods: the normalized blob blend is
+    // defined at every pixel (gaussian tails never reach zero), so blobs
+    // cover the whole frame with no background peeking through the gaps
+    if (uFlood > 0.0 && uNB > 0) {
+      col = mix(col, acc / wsum, uFlood * uOpacity * mask);
+    }
+    // saturation: 0 greyscale, 1 as-authored, 2 vivid
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = clamp(mix(vec3(lum), col, uSat), 0.0, 1.0);
     // optional hairline right at the waterline (defocused near the frame edge)
     float ln = (1.0 - smoothstep(0.004, 0.016 + eb * 0.05, abs(p.y - uLevel))) * (1.0 - eb * 0.8);
     col = mix(col, uLineCol, ln * uLineA);
@@ -92,12 +148,17 @@ function createEffect(canvas, C) {
       const h = k => hash(i * 23.17 + k * 71.3);
       const a = h(3) * 6.28318;
       blobs.push({
-        x: (h(1) - 0.5) * 1.5, y: -0.9 + h(2) * 0.8,   // start inside the pool
+        x: (h(1) - 0.5) * 1.5,
+        y: (h(2) - 0.5) * 1.8,             // free float: anywhere in the frame
         dx: Math.cos(a), dy: Math.sin(a),
         rf: (h(4) - 0.5) * 2,
         phase: h(5) * 6.28318,
         ox: 0, oy: 0, vx: 0, vy: 0,                     // cursor stir displacement + velocity
       });
+    }
+    for (const b of blobs) {
+      b.lastPx = b.x; b.lastPy = b.y;
+      b.lx = -0.5547; b.ly = 0.8321;                    // per-blob light, starts at the global source
     }
   }
   rebuildBlobs();
@@ -151,202 +212,12 @@ function createEffect(canvas, C) {
 
   const posData = new Float32Array(12 * 4);
   const colData = new Float32Array(12 * 3);
+  const squishData = new Float32Array(12 * 4);   // contact dir x, y, amount, light angle
 
-  // ==================== web overlay (mirrors the web shader) ====================
-
-  const VS_LINE = `#version 300 es
-  layout(location=0) in vec2 corner;    // x: 0..1 along, y: -1..1 across
-  layout(location=1) in vec4 iSeg;      // ax, ay, bx, by (unit space)
-  layout(location=2) in vec2 iMeta;     // width px, alpha
-  uniform vec2 uRes;
-  out float vAcross; out float vHalfPx; out float vAlpha;
-  void main() {
-    vec2 a = iSeg.xy, b = iSeg.zw;
-    vec2 dir = normalize(b - a + 1e-6);
-    vec2 perp = vec2(-dir.y, dir.x);
-    float scale = 0.5 * min(uRes.x, uRes.y);
-    float halfU = (iMeta.x * 0.5 + 1.0) / scale;
-    vec2 p = mix(a, b, corner.x) + perp * halfU * corner.y;
-    gl_Position = vec4(p * scale / (0.5 * uRes), 0.0, 1.0);
-    vAcross = corner.y * (iMeta.x * 0.5 + 1.0);
-    vHalfPx = iMeta.x * 0.5;
-    vAlpha = iMeta.y;
-  }`;
-  const FS_LINE = `#version 300 es
-  precision highp float;
-  in float vAcross; in float vHalfPx; in float vAlpha;
-  uniform vec3 uColor;
-  out vec4 o;
-  void main() {
-    float edge = smoothstep(vHalfPx + 0.7, max(vHalfPx - 0.7, 0.0), abs(vAcross));
-    o = vec4(uColor, edge * vAlpha);
-  }`;
-  const VS_DOT = `#version 300 es
-  layout(location=0) in vec2 corner;    // -1..1
-  layout(location=1) in vec4 iDot;      // x, y, size px, alpha
-  uniform vec2 uRes;
-  out vec2 vLocal; out float vSize; out float vAlpha;
-  void main() {
-    float scale = 0.5 * min(uRes.x, uRes.y);
-    float rU = (iDot.z * 0.5 + 1.5) / scale;
-    vec2 p = iDot.xy + corner * rU;
-    gl_Position = vec4(p * scale / (0.5 * uRes), 0.0, 1.0);
-    vLocal = corner * (iDot.z * 0.5 + 1.5);
-    vSize = iDot.z * 0.5;
-    vAlpha = iDot.w;
-  }`;
-  const FS_DOT = `#version 300 es
-  precision highp float;
-  in vec2 vLocal; in float vSize; in float vAlpha;
-  uniform vec3 uColor; uniform float uShape;
-  out vec4 o;
-  void main() {
-    vec2 q = vLocal;
-    float d;
-    if (uShape < 0.5)      d = length(q) - vSize;                    // circle
-    else if (uShape < 1.5) d = max(abs(q.x), abs(q.y)) - vSize;      // square
-    else if (uShape < 2.5) d = (abs(q.x) + abs(q.y)) * 0.82 - vSize; // diamond
-    else                   d = abs(length(q) - vSize * 0.75) - vSize * 0.28; // ring
-    o = vec4(uColor, smoothstep(0.8, -0.8, d) * vAlpha);
-  }`;
-  function wProgram(vs, fs) {
-    const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
-    const p = gl.createProgram();
-    gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
-    gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
-    gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-    return p;
-  }
-  const wProgLine = wProgram(VS_LINE, FS_LINE);
-  const wProgDot = wProgram(VS_DOT, FS_DOT);
-  const WU = (p, n) => gl.getUniformLocation(p, n);
-  const wHex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
-
-  const MAX_N = 400, MAX_E = MAX_N * 4;
-  const segData = new Float32Array(MAX_E * 4);
-  const segMeta = new Float32Array(MAX_E * 2);
-  const dotData = new Float32Array(MAX_N * 4);
-  function wMakeVao(corners, instances) {
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    const cBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, cBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, corners, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const it of instances) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, it.buf);
-      gl.bufferData(gl.ARRAY_BUFFER, it.bytes, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(it.loc);
-      gl.vertexAttribPointer(it.loc, it.size, gl.FLOAT, false, 0, 0);
-      gl.vertexAttribDivisor(it.loc, 1);
-    }
-    gl.bindVertexArray(null);
-    return vao;
-  }
-  const segBuf = gl.createBuffer(), segMetaBuf = gl.createBuffer(), dotBuf = gl.createBuffer();
-  const wVaoLine = wMakeVao(new Float32Array([0,-1, 1,-1, 0,1, 1,1]),
-    [{ buf: segBuf, bytes: segData.byteLength, loc: 1, size: 4 },
-     { buf: segMetaBuf, bytes: segMeta.byteLength, loc: 2, size: 2 }]);
-  const wVaoDot = wMakeVao(new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),
-    [{ buf: dotBuf, bytes: dotData.byteLength, loc: 1, size: 4 }]);
-
-  // ---- web structure: nodes on an irregular blob shell + k-nearest links ----
-  let nodes = [], edges = [], maxR = 1;
-  function rebuildWeb() {
-    const hash = n => { const x = Math.sin(n + C.seed * 1013.7) * 43758.5453123; return x - Math.floor(x); };
-    const N = Math.min(Math.round(C.webCount), MAX_N);
-    const GA = 2.39996322973;
-    const ph1 = hash(1) * 6.28, ph2 = hash(2) * 6.28, ph3 = hash(3) * 6.28;
-    nodes = [];
-    for (let i = 0; i < N; i++) {
-      let z = 1 - 2 * (i + 0.5) / N;
-      z = Math.min(Math.max(z + (hash(i * 7.1) - 0.5) * 0.2, -0.99), 0.99);
-      const th = i * GA + hash(i * 3.3) * 0.9;
-      const s = Math.sqrt(1 - z * z);
-      const dx = s * Math.cos(th), dy = s * Math.sin(th), dz = z;
-      // irregular blob: radius modulated by seeded low-frequency waves
-      const mod = 1 + C.webIrregularity * (0.45 * Math.sin(3.1 * dx + ph1)
-        + 0.35 * Math.sin(4.2 * dy + ph2) + 0.25 * Math.sin(5.3 * dz + ph3));
-      const r = C.webRadius * mod * (0.82 + 0.18 * hash(i * 11.7));
-      nodes.push({ rest: [dx * r, dy * r, dz * r], disp: [0, 0, 0], vel: [0, 0, 0], px: 0, py: 0, s: 1 });
-    }
-    maxR = C.webRadius * (1 + C.webIrregularity);
-    // k-nearest links
-    const k = Math.round(C.linksPerNode);
-    const set = new Set();
-    edges = [];
-    for (let i = 0; i < N; i++) {
-      const d2 = [];
-      for (let j = 0; j < N; j++) {
-        if (j === i) continue;
-        const a = nodes[i].rest, b = nodes[j].rest;
-        d2.push([(a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2, j]);
-      }
-      d2.sort((x, y) => x[0] - y[0]);
-      for (let m = 0; m < k && m < d2.length; m++) {
-        const j = d2[m][1];
-        const key = i < j ? i * MAX_N + j : j * MAX_N + i;
-        if (set.has(key)) continue;
-        set.add(key);
-        edges.push({ a: i, b: j, len: Math.sqrt(d2[m][0]) });
-      }
-    }
-  }
-  rebuildWeb();
-
-  // ---- interaction: drag a node, or drag space to rotate ----
-  // yaw chases yawTarget with a lag, so node drags swing the whole web
-  // around the spin axis at a slight delay while the spin keeps running
-  let yaw = 0.5, yawTarget = 0.5, pitch = -0.25, pitchTarget = -0.25;
-  let dragIdx = -1, rotating = false;
-  let spinDir = 1, tiltDir = 1;      // idle rotation follows the last drag direction
-  let lastU = [0, 0], dragTarget = [0, 0];
-  const toUnit = ev => {
-    const r = canvas.getBoundingClientRect();
-    return [((ev.clientX - r.left) / r.width - 0.5) * 2, (0.5 - (ev.clientY - r.top) / r.height) * 2];
-  };
-  canvas.addEventListener('pointerdown', ev => {
-    const u = toUnit(ev);
-    let best = -1, bestD = 0.09;
-    for (let i = 0; i < nodes.length; i++) {
-      const d = Math.hypot(nodes[i].px - u[0], nodes[i].py - u[1]);
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    if (best >= 0) { dragIdx = best; dragTarget = u; }
-    else rotating = true;
-    lastU = u;
-    canvas.setPointerCapture(ev.pointerId);
-  });
-  canvas.addEventListener('pointermove', ev => {
-    const u = toUnit(ev);
-    const dxu = u[0] - lastU[0], dyu = u[1] - lastU[1];
-    if (dragIdx >= 0 || rotating) {
-      // the idle spin continues in whichever direction you dragged
-      if (Math.abs(dxu) > 0.001) spinDir = dxu > 0 ? 1 : -1;
-      if (Math.abs(dyu) > 0.001) tiltDir = dyu > 0 ? -1 : 1;
-    }
-    if (dragIdx >= 0) {
-      dragTarget = u;
-      // pulling a node tows the whole web around both rotation axes
-      const g = C.dragSwing / Math.max(nodes[dragIdx].s, 0.4);
-      yawTarget += dxu * g;
-      pitchTarget -= dyu * g;
-    } else if (rotating) {
-      yawTarget += dxu * 2.6;
-      pitchTarget -= dyu * 2.6;
-    }
-    lastU = u;
-  });
-  const release = () => { dragIdx = -1; rotating = false; };
-  canvas.addEventListener('pointerup', release);
-  canvas.addEventListener('pointercancel', release);
 
   let simT = 0;
   return {
-    rebuild() { rebuildBlobs(); rebuildWeb(); },
+    rebuild() { rebuildBlobs(); },
     dispose() {                            // stop the video decode when the effect is torn down
       canvas._bgVideo = null;              // release the cropper's shared reference
       if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
@@ -355,25 +226,32 @@ function createEffect(canvas, C) {
     frame(dt, mouse) {
       if (!C.blobStatic) simT += dt;   // static freezes drift and hue motion
       const bound = 0.95;
-      // waterline in unit space; fill 1 lifts the line plus its soft edge
-      // fully above the frame so the pool reaches the very top
-      const level = -1 + C.fillLevel * (2 + C.boundarySoft * 2);
-      const yTop = Math.min(level, bound);
-      const nPal = Math.min(Math.max(Math.round(C.paletteCount), 1), 6);
+      // waterline in unit space; fill 1 lifts the line plus its soft edge —
+      // including the widest frame-edge-blur widening (0.35) — fully above
+      // the frame, so the pool floods to the very top in every configuration
+      const level = -1 + C.fillLevel * (2 + C.boundarySoft * 2 + 0.4);
+      const nPal = Math.min(Math.max(Math.round(C.paletteCount), 1), 10);
       const mouseNear = Math.hypot(mouse[0], mouse[1]) < 5;
       const R2 = C.cursorRadius * C.cursorRadius;
       const damp = Math.exp(-C.damping * dt);
       for (let i = 0; i < blobs.length; i++) {
         const b = blobs[i];
         if (!C.blobStatic) {
-          // slow infinite wall bounce, ceiling = the waterline
-          b.x += b.dx * C.speed * dt;
-          b.y += b.dy * C.speed * dt;
+          // idle wander: headings curve gently on two slow sine clocks, so
+          // blobs meander around the frame instead of ping-ponging straight
+          const turn = (Math.sin(simT * 0.35 + b.phase * 2.3)
+                      + Math.sin(simT * 0.13 + b.phase * 5.1)) * 0.35 * dt;
+          const ct = Math.cos(turn), st = Math.sin(turn);
+          const ndx = b.dx * ct - b.dy * st, ndy = b.dx * st + b.dy * ct;
+          b.dx = ndx; b.dy = ndy;
+          const sf = 1 + b.rf * 0.35;            // per-blob pace variation
+          b.x += b.dx * C.speed * sf * dt;
+          b.y += b.dy * C.speed * sf * dt;
           if (b.x > bound) { b.x = bound; b.dx = -Math.abs(b.dx); }
           if (b.x < -bound) { b.x = -bound; b.dx = Math.abs(b.dx); }
+          if (b.y > bound) { b.y = bound; b.dy = -Math.abs(b.dy); }
           if (b.y < -bound) { b.y = -bound; b.dy = Math.abs(b.dy); }
         }
-        if (b.y > yTop) { b.y = yTop; b.dy = -Math.abs(b.dy); }   // waterline clamps even when static
         // cursor stir: gaussian pull (negative repels) with a spring back home
         let fx = 0, fy = 0;
         if (mouseNear && C.cursorPull !== 0) {
@@ -387,9 +265,9 @@ function createEffect(canvas, C) {
         b.vy += (fy * 1.5 - b.oy * C.stiffness * 0.02) * dt * 60 * 0.05;
         b.vx *= damp; b.vy *= damp;
         b.ox += b.vx * dt * 60 * 0.05; b.oy += b.vy * dt * 60 * 0.05;
-        posData[i * 4] = b.x + b.ox;
-        posData[i * 4 + 1] = b.y + b.oy;
-        posData[i * 4 + 2] = C.size * (1 + b.rf * C.sizeVariation);
+        b.px = b.x + b.ox;
+        b.py = b.y + b.oy;
+        b.rad = C.size * (1 + b.rf * C.sizeVariation);
         // subtle continuous hue drift around each blob's palette colour
         const base = hex(C['blobColor' + (i % nPal + 1)]);
         const hsv = rgb2hsv(base[0], base[1], base[2]);
@@ -397,17 +275,85 @@ function createEffect(canvas, C) {
         const rgb = hsv2rgb(hsv[0], hsv[1], hsv[2]);
         colData[i * 3] = rgb[0]; colData[i * 3 + 1] = rgb[1]; colData[i * 3 + 2] = rgb[2];
       }
+
+      // ---- soft contact: blobs press and squish instead of overlapping ----
+      for (let i = 0; i < blobs.length; i++) { const b = blobs[i]; b.sqx = 0; b.sqy = 0; b.sqa = 0; }
+      if (C.blobSquish > 0) {
+        const relax = Math.min(dt * 6, 1);   // overlap resolves over ~1/6s: squishy, not snappy
+        for (let i = 0; i < blobs.length; i++) for (let j = i + 1; j < blobs.length; j++) {
+          const A = blobs[i], B = blobs[j];
+          const dxp = B.px - A.px, dyp = B.py - A.py;
+          const minD = (A.rad + B.rad) * 0.62;   // gaussians read as solid around 0.6r
+          const dist = Math.max(Math.hypot(dxp, dyp), 1e-4);
+          if (dist >= minD) continue;
+          const ux = dxp / dist, uy = dyp / dist;
+          const depth = 1 - dist / minD;
+          if (!C.blobStatic) {
+            // resolve most of the overlap gradually; what remains reads as squish
+            const corr = (minD - dist) * 0.35 * relax;
+            A.x -= ux * corr; B.x += ux * corr;
+            A.y = Math.min(Math.max(A.y - uy * corr, -bound), bound);
+            B.y = Math.min(Math.max(B.y + uy * corr, -bound), bound);
+            A.px -= ux * corr; A.py -= uy * corr;
+            B.px += ux * corr; B.py += uy * corr;
+            // steer travel apart so head-on pairs slide off each other
+            A.dx -= ux * depth * dt * 2; A.dy -= uy * depth * dt * 2;
+            B.dx += ux * depth * dt * 2; B.dy += uy * depth * dt * 2;
+          }
+          A.sqx += ux * depth; A.sqy += uy * depth;
+          B.sqx -= ux * depth; B.sqy -= uy * depth;
+          A.sqa = Math.min(A.sqa + depth, 1); B.sqa = Math.min(B.sqa + depth, 1);
+        }
+        if (!C.blobStatic) for (const b of blobs) {
+          const m = Math.hypot(b.dx, b.dy) || 1;   // steering must not change speed
+          b.dx /= m; b.dy /= m;
+        }
+      }
+      for (let i = 0; i < blobs.length; i++) {
+        const b = blobs[i];
+        posData[i * 4] = b.px;
+        posData[i * 4 + 1] = b.py;
+        posData[i * 4 + 2] = b.rad;
+        posData[i * 4 + 3] = b.phase;      // per-blob shape seed
+        const m = Math.hypot(b.sqx, b.sqy);
+        squishData[i * 4] = m > 1e-4 ? b.sqx / m : 0;
+        squishData[i * 4 + 1] = m > 1e-4 ? b.sqy / m : 0;
+        squishData[i * 4 + 2] = Math.min(b.sqa * C.blobSquish, 1);
+        // the light swings toward each blob's direction of travel and eases
+        // back to the global source when the blob rests
+        const mvx = (b.px - b.lastPx) / Math.max(dt, 1e-3);
+        const mvy = (b.py - b.lastPy) / Math.max(dt, 1e-3);
+        b.lastPx = b.px; b.lastPy = b.py;
+        const sp = Math.hypot(mvx, mvy);
+        let tx = -0.5547, ty = 0.8321;
+        if (sp > 0.005) {
+          const k = Math.min(sp / 0.2, 1) * 0.85;
+          tx = tx * (1 - k) + (mvx / sp) * k;
+          ty = ty * (1 - k) + (mvy / sp) * k;
+        }
+        const ease = 1 - Math.exp(-dt * 3);
+        b.lx += (tx - b.lx) * ease;
+        b.ly += (ty - b.ly) * ease;
+        squishData[i * 4 + 3] = Math.atan2(b.ly, b.lx);
+      }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.useProgram(prog);
       gl.uniform2f(U('uRes'), canvas.width, canvas.height);
       gl.uniform1f(U('uTime'), simT);
       gl.uniform4fv(U('uBlobs'), posData);
+      gl.uniform4fv(U('uSquish'), squishData);
       gl.uniform3fv(U('uBlobCols'), colData);
       gl.uniform1i(U('uNB'), C.blobsOn ? blobs.length : 0);   // blobs off -> pure gradient
       gl.uniform1f(U('uSoftK'), 3.0 / Math.max(C.edgeSoftness, 0.05));
       gl.uniform1f(U('uOpacity'), C.opacity);
       gl.uniform1f(U('uAngle'), C.gradientAngle * Math.PI / 180);
       gl.uniform1f(U('uEdgeBlur'), C.edgeBlur);
+      gl.uniform1f(U('uSplit'), C.rgbSplit);
+      gl.uniform1f(U('uSat'), C.saturation);
+      gl.uniform1f(U('uShapeAmt'), C.blobShape);
+      // flood ramps in over the last 10% of the fill slider: at the endpoint
+      // the blob blend covers every pixel of the frame
+      gl.uniform1f(U('uFlood'), Math.min(Math.max((C.fillLevel - 0.9) * 10, 0), 1));
       gl.uniform1f(U('uLevel'), level);
       gl.uniform1f(U('uBSoft'), Math.max(C.boundarySoft, 0.003));
       gl.uniform1f(U('uLineA'), C.surfaceLine);
@@ -431,116 +377,6 @@ function createEffect(canvas, C) {
       gl.bindTexture(gl.TEXTURE_2D, imgTex);
       gl.uniform1i(U('uImg'), 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      // ---- web overlay on top ----
-      if (C.webOn) {
-
-        yawTarget += dt * Math.abs(C.autoSpin) * spinDir;   // spin follows drag direction
-        pitchTarget += dt * Math.abs(C.autoTilt) * tiltDir;
-        const chase = 1 - Math.exp(-dt * C.swingDelay);
-        yaw += (yawTarget - yaw) * chase;
-        pitch += (pitchTarget - pitch) * chase;
-        const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-        // R = Ry(yaw) * Rx(pitch); columns for model->view
-        const rot = m => {
-          const y1 = m[1] * cp - m[2] * sp, z1 = m[1] * sp + m[2] * cp;
-          return [m[0] * cy + z1 * sy, y1, -m[0] * sy + z1 * cy];
-        };
-        const invRot = v => {           // transpose
-          const x1 = v[0] * cy - v[2] * sy, z1 = v[0] * sy + v[2] * cy;
-          return [x1, v[1] * cp + z1 * sp, -v[1] * sp + z1 * cp];
-        };
-
-        // ---- spring physics in model space ----
-        const kWeb = C.webStiffness, kSnap = C.snapStiffness;
-        const wDamp = Math.exp(-C.snapDamping * dt);
-        for (const e of edges) {
-          const A = nodes[e.a], B = nodes[e.b];
-          const ax = A.rest[0] + A.disp[0], ay = A.rest[1] + A.disp[1], az = A.rest[2] + A.disp[2];
-          const bx = B.rest[0] + B.disp[0], by = B.rest[1] + B.disp[1], bz = B.rest[2] + B.disp[2];
-          let dx = ax - bx, dy = ay - by, dz = az - bz;
-          const len = Math.max(Math.hypot(dx, dy, dz), 1e-5);
-          const f = kWeb * (len - e.len) / len * dt;
-          dx *= f; dy *= f; dz *= f;
-          A.vel[0] -= dx; A.vel[1] -= dy; A.vel[2] -= dz;
-          B.vel[0] += dx; B.vel[1] += dy; B.vel[2] += dz;
-        }
-        for (let i = 0; i < nodes.length; i++) {
-          const n = nodes[i];
-          if (i === dragIdx) {
-            // hard constraint: dragged node follows the pointer in its depth plane
-            const view = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-            const target = invRot([dragTarget[0] / Math.max(n.s, 0.3), dragTarget[1] / Math.max(n.s, 0.3), view[2]]);
-            n.disp[0] = target[0] - n.rest[0]; n.disp[1] = target[1] - n.rest[1]; n.disp[2] = target[2] - n.rest[2];
-            n.vel = [0, 0, 0];
-            continue;
-          }
-          for (let a = 0; a < 3; a++) {
-            n.vel[a] -= n.disp[a] * kSnap * dt;   // snap home -> core stays fixed
-            n.vel[a] *= wDamp;
-            n.disp[a] += n.vel[a] * dt;
-          }
-        }
-
-        // ---- project, depth-sort, fill instance buffers ----
-        const persp = C.perspective;
-        const order = [];
-        for (let i = 0; i < nodes.length; i++) {
-          const n = nodes[i];
-          const v = rot([n.rest[0] + n.disp[0], n.rest[1] + n.disp[1], n.rest[2] + n.disp[2]]);
-          const s = persp / Math.max(persp - v[2], 0.4);
-          n.px = v[0] * s; n.py = v[1] * s; n.s = s;
-          n.depth = Math.min(Math.max((v[2] + maxR) / (2 * maxR), 0), 1);
-          n.z = v[2];
-          order.push(i);
-        }
-        order.sort((a, b) => nodes[a].z - nodes[b].z);           // far first
-        const eOrder = edges.map((e, i) => i)
-          .sort((a, b) => (nodes[edges[a].a].z + nodes[edges[a].b].z) - (nodes[edges[b].a].z + nodes[edges[b].b].z));
-
-        const dprScale = canvas.width / Math.max(canvas.clientWidth, 1);
-        const fade = C.depthFade, dSize = C.depthShrink;
-        let nE = 0;
-        for (const ei of eOrder) {
-          const e = edges[ei], A = nodes[e.a], B = nodes[e.b];
-          const depth = (A.depth + B.depth) * 0.5;
-          segData[nE * 4] = A.px; segData[nE * 4 + 1] = A.py;
-          segData[nE * 4 + 2] = B.px; segData[nE * 4 + 3] = B.py;
-          segMeta[nE * 2] = C.lineWidth * (1 - dSize * (1 - depth)) * dprScale;
-          segMeta[nE * 2 + 1] = C.lineOpacity * (1 - fade * (1 - depth));
-          nE++;
-        }
-        let nD = 0;
-        for (const i of order) {
-          const n = nodes[i];
-          dotData[nD * 4] = n.px; dotData[nD * 4 + 1] = n.py;
-          dotData[nD * 4 + 2] = C.nodeSize * (1 - dSize * (1 - n.depth)) * n.s * dprScale;
-          dotData[nD * 4 + 3] = 1 - fade * (1 - n.depth);
-          nD++;
-        }
-
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-        gl.useProgram(wProgLine);
-        gl.uniform2f(WU(wProgLine, 'uRes'), canvas.width, canvas.height);
-        gl.uniform3f(WU(wProgLine, 'uColor'), ...wHex(C.lineColor));
-        gl.bindVertexArray(wVaoLine);
-        gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segData.subarray(0, nE * 4));
-        gl.bindBuffer(gl.ARRAY_BUFFER, segMetaBuf);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segMeta.subarray(0, nE * 2));
-        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nE);
-
-        gl.useProgram(wProgDot);
-        gl.uniform2f(WU(wProgDot, 'uRes'), canvas.width, canvas.height);
-        gl.uniform3f(WU(wProgDot, 'uColor'), ...wHex(C.nodeColor));
-        gl.uniform1f(WU(wProgDot, 'uShape'), Math.round(C.nodeShape));
-        gl.bindVertexArray(wVaoDot);
-        gl.bindBuffer(gl.ARRAY_BUFFER, dotBuf);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, dotData.subarray(0, nD * 4));
-        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nD);
-        gl.bindVertexArray(null);
-      }
     },
   };
 }

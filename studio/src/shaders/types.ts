@@ -2,7 +2,7 @@
  *  strings by design (see DESIGN docs): the same text runs live via
  *  `new Function`, in the editor, and inlined into standalone exports. */
 
-export type ShaderId = 'orb' | 'lava' | 'pixels' | 'particle' | 'tide' | 'bleed';
+export type ShaderId = 'orb' | 'lava' | 'pixels' | 'particle' | 'tide' | 'silk' | 'bleed' | 'web';
 
 export type ConfigValue = number | string | boolean;
 export type Config = Record<string, ConfigValue>;
