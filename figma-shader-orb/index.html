@@ -2627,13 +2627,111 @@ function createEffect(canvas, C) {
   canvas.addEventListener('pointerup', release);
   canvas.addEventListener('pointercancel', release);
 
+  // ---- background: flat colour, or uploaded media over it ----
+  const VS_TRI = `#version 300 es
+  void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.0-1.0,0.,1.);}`;
+  const FS_BG = `#version 300 es
+  precision highp float;
+  uniform vec2 uRes;
+  uniform vec3 uBg;
+  uniform float uImgOn, uImgAspect, uCanvasA, uImgRot, uImgZoom, uImgX, uImgY, uImgFlip, uImgAlpha;
+  uniform sampler2D uImg;
+  vec3 bgSample(vec2 fuv, vec3 fb) {
+    if (uImgOn < 0.5) return fb;
+    vec2 q = fuv - 0.5;
+    q.x *= uCanvasA;
+    if (uImgFlip > 0.5) q.x = -q.x;
+    float cr = cos(uImgRot), sr = sin(uImgRot);
+    q = mat2(cr, sr, -sr, cr) * q;
+    q /= max(uImgZoom, 0.05);
+    q.x /= uCanvasA;
+    vec2 uv = q + 0.5 - vec2(uImgX, uImgY);
+    if (uImgAspect > uCanvasA) { uv.x = 0.5 + (uv.x - 0.5) * (uCanvasA / uImgAspect); }
+    else { uv.y = 0.5 + (uv.y - 0.5) * (uImgAspect / uCanvasA); }
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return fb;
+    return mix(fb, texture(uImg, vec2(uv.x, 1.0 - uv.y)).rgb, uImgAlpha);
+  }
+  out vec4 o;
+  void main(){ o = vec4(bgSample(gl_FragCoord.xy / uRes, uBg), 1.0); }`;
+  const progBg = wProgram(VS_TRI, FS_BG);
+
+  // optional background media (uploaded asset): still image or looping video
+  let imgTex = null, imgAspect = 1, videoEl = null, videoReady = false, videoObjURL = null;
+  const texParams = () => {
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
+  const bgAsset = document.getElementById('asset-webbg');
+  const bgSrc = bgAsset ? bgAsset.textContent.trim() : '';
+  if (bgSrc && /^data:video\/|\.(mp4|webm|ogv|mov|m4v)(\?|#|$)/i.test(bgSrc)) {
+    videoEl = document.createElement('video');
+    Object.assign(videoEl, { muted: true, loop: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous' });
+    canvas._bgVideo = videoEl;             // shared with the cropper: it previews this exact decoder
+    videoEl.addEventListener('loadeddata', () => {
+      imgAspect = (videoEl.videoWidth / videoEl.videoHeight) || 1;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      texParams();
+      videoReady = true;
+    });
+    const play = () => videoEl && videoEl.play().catch(() => {});  // muted autoplay is allowed
+    if (bgSrc.startsWith('data:')) {
+      // <video> won't reliably load a large data: URL — feed it a blob URL instead
+      fetch(bgSrc).then(r => r.blob()).then(b => {
+        if (!videoEl) return;
+        videoObjURL = URL.createObjectURL(b);
+        videoEl.src = videoObjURL;
+        play();
+      }).catch(() => {});
+    } else {
+      videoEl.src = bgSrc;                 // http(s) URL passthrough
+      play();
+    }
+  } else if (bgSrc) {
+    const img = new Image();
+    img.onload = () => {
+      imgAspect = img.width / img.height;
+      imgTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      texParams();
+    };
+    img.src = bgSrc;
+  }
+
   return {
     rebuild() { rebuildWeb(); },
+    dispose() {                            // stop the video decode when the effect is torn down
+      canvas._bgVideo = null;              // release the cropper's shared reference
+      if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl = null; }
+      if (videoObjURL) { URL.revokeObjectURL(videoObjURL); videoObjURL = null; }
+    },
     frame(dt, mouse) {
       gl.viewport(0, 0, canvas.width, canvas.height);
-      const b = hex(C.bg);
-      gl.clearColor(b[0], b[1], b[2], 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.disable(gl.BLEND);
+      gl.useProgram(progBg);
+      gl.uniform2f(WU(progBg, 'uRes'), canvas.width, canvas.height);
+      gl.uniform3f(WU(progBg, 'uBg'), ...hex(C.bg));
+      gl.uniform1f(WU(progBg, 'uImgOn'), C.imageOn && imgTex ? 1 : 0);
+      gl.uniform1f(WU(progBg, 'uImgAspect'), imgAspect);
+      gl.uniform1f(WU(progBg, 'uCanvasA'), canvas.width / Math.max(canvas.height, 1));
+      gl.uniform1f(WU(progBg, 'uImgRot'), C.imageRotate * Math.PI / 180);
+      gl.uniform1f(WU(progBg, 'uImgZoom'), C.imageZoom);
+      gl.uniform1f(WU(progBg, 'uImgX'), C.imageX);
+      gl.uniform1f(WU(progBg, 'uImgY'), C.imageY);
+      gl.uniform1f(WU(progBg, 'uImgFlip'), C.imageFlip ? 1 : 0);
+      gl.uniform1f(WU(progBg, 'uImgAlpha'), C.imageOpacity);
+      if (videoEl && videoReady) {         // pump the current video frame
+        gl.bindTexture(gl.TEXTURE_2D, imgTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      }
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, imgTex);
+      gl.uniform1i(WU(progBg, 'uImg'), 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
       // ---- web overlay on top ----
       if (C.webOn) {
         const wx = C.webX || 0, wy = C.webY || 0;   // web position (drag to move)
@@ -2749,6 +2847,7 @@ function createEffect(canvas, C) {
   };
 }
 </script>
+<script id="asset-webbg" type="text/plain"></script>
 
 <script>
 'use strict';
@@ -3498,7 +3597,14 @@ const EFFECTS = {
   },
   web: {
     name: 'web',
+    assets: ['asset-webbg'],
+    fileAssets: { imageUpload: 'asset-webbg' },
     deps: {
+      imageUpload: c => c.imageOn,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageFlip: c => c.imageOn,
+      imageOpacity: c => c.imageOn,
       webDrag: c => c.webOn,
       webCount: c => c.webOn,
       webRadius: c => c.webOn,
@@ -3533,6 +3639,7 @@ const EFFECTS = {
     bgKey: 'bg',
     DEFAULTS: {
       bg: '#ffffff', seed: 0,
+      imageOn: true, imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       webOn: true, webDrag: false, webX: 0, webY: 0,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
       nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
@@ -3545,6 +3652,12 @@ const EFFECTS = {
     GROUPS: [
       ['Background', [
         ['background color', 'bg', 'color'],
+        ['upload image / video', 'imageUpload', 'file'],
+        ['show media', 'imageOn', 'check'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
+        ['flip horizontal', 'imageFlip', 'check'],
+        ['media opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
       ['Web structure', [
         ['web visible', 'webOn', 'check'],

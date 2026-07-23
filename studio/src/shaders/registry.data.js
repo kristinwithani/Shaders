@@ -745,7 +745,14 @@ export const EFFECTS = {
   },
   web: {
     name: 'web',
+    assets: ['asset-webbg'],
+    fileAssets: { imageUpload: 'asset-webbg' },
     deps: {
+      imageUpload: c => c.imageOn,
+      imageRotate: c => c.imageOn,
+      imageZoom: c => c.imageOn,
+      imageFlip: c => c.imageOn,
+      imageOpacity: c => c.imageOn,
       webDrag: c => c.webOn,
       webCount: c => c.webOn,
       webRadius: c => c.webOn,
@@ -780,6 +787,7 @@ export const EFFECTS = {
     bgKey: 'bg',
     DEFAULTS: {
       bg: '#ffffff', seed: 0,
+      imageOn: true, imageRotate: 0, imageZoom: 1, imageX: 0, imageY: 0, imageFlip: false, imageOpacity: 1,
       webOn: true, webDrag: false, webX: 0, webY: 0,
       webCount: 200, webRadius: 0.6, webIrregularity: 0.45, linksPerNode: 3,
       nodeShape: 0, nodeSize: 5, nodeColor: '#2a00ff',
@@ -792,6 +800,12 @@ export const EFFECTS = {
     GROUPS: [
       ['Background', [
         ['background color', 'bg', 'color'],
+        ['upload image / video', 'imageUpload', 'file'],
+        ['show media', 'imageOn', 'check'],
+        ['rotate media', 'imageRotate', 'rot'],
+        ['crop media', 'imageZoom', 'crop'],
+        ['flip horizontal', 'imageFlip', 'check'],
+        ['media opacity', 'imageOpacity', 0, 1, 0.01],
       ]],
       ['Web structure', [
         ['web visible', 'webOn', 'check'],
