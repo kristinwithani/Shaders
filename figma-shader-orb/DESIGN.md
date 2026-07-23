@@ -246,7 +246,7 @@ Collapsible layers with a Dim Readout disclosure glyph that swaps from ▸ to �
 The summary is a primary button with a direction glyph that flips between up and down. The menu rises above it as an Instrument-White list framed in 1px Signal Ink; items are uppercase, left-aligned, hairline-separated, and invert fully on hover.
 
 ### Code Drawer
-A bottom drawer with a hairline top rule. The bar holds a Label voice title, apply as primary, revert and copy as ghosts, and a Dim status line that ellipsizes. The editor is a 38vh mono field on Field Wash, borderless except the hairline above, tab-size 2.
+A bottom drawer with a hairline top rule and a `settings | engine` view toggle. **Settings** (default) is a live, read-only `const C = {…}` mirror of exactly what the controls are driving into the canvas — it updates as you tune and copies as the paste-ready artifact. **Engine** is the editable source (apply as primary, revert and copy as chips) with two-layer auto-revert. Both are 38vh mono fields on Field Wash, borderless except the hairline above, tab-size 2; the bar carries a Label-voice title and a Dim status line.
 
 ### Hero Overlay
 The landing-page preview: Display-voice headline, 18px body, and a link whose arrow slides 4px rightward over 0.2s on hover. It renders above the canvas and belongs to the signal, not the bezel.
