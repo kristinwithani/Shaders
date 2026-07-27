@@ -6,6 +6,7 @@ import tideSrc from '../engines/tide.engine.js?raw';
 import silkSrc from '../engines/silk.engine.js?raw';
 import webSrc from '../engines/web.engine.js?raw';
 import bleedSrc from '../engines/bleed.engine.js?raw';
+import irisSrc from '../engines/iris.engine.js?raw';
 // @ts-ignore -- extracted verbatim data module
 import { EFFECTS as EFFECTS_RAW } from './registry.data.js';
 import type { RawEffect, ShaderId } from './types';
@@ -25,6 +26,7 @@ export const ENGINE_SOURCES: Record<ShaderId, string> = {
   silk: silkSrc,
   web: webSrc,
   bleed: bleedSrc,
+  iris: irisSrc,
 };
 
 export function isShaderId(id: unknown): id is ShaderId {

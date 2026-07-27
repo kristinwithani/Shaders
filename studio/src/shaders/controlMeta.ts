@@ -47,6 +47,7 @@ export const TINTS: Record<ShaderId, Record<string, string>> = {
     lineOpacity: 'lineColor',
   },
 
+  iris: {},
 };
 
 export function tintFor(id: ShaderId, key: string, C: Config): string | null {
@@ -291,6 +292,30 @@ const PER: Record<ShaderId, Record<string, string>> = {
     autoTilt: 'idle tilt speed',
     dragSwing: 'how much a node drag swings the whole web',
     swingDelay: 'how quickly the swing responds',
+  },
+  iris: {
+    bars: 'number of rays around the ring',
+    spread: 'angular width of each ray',
+    jitter: 'random variation in ray reach',
+    peak: 'longest ray reach from the core',
+    valley: 'shortest ray reach',
+    curve: 'how reach falls off around the ring',
+    fold: 'tilts the disc away in perspective',
+    foldDepth: 'camera distance for the fold',
+    bg: 'stage colour behind the rays',
+    blendMode: 'how ray colour meets the stage',
+    brightness: 'overall glow strength',
+    stopCount: 'how many colours build the radial rainbow',
+    melt: 'how much neighbouring rays blur together',
+    feather: 'softness of each ray rim',
+    halo: 'glow reaching past the rim',
+    colorSoft: 'how smoothly rainbow stops blend',
+    breathe: 'slow reach pulse',
+    shimmer: 'fine ripple along the rim',
+    riseOn: 'bloom outward from the core on load',
+    riseTime: 'how long the bloom takes',
+    cursorLift: 'how far rays extend toward the cursor',
+    cursorGlow: 'brightening near the cursor',
   },
 };
 
