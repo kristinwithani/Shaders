@@ -3208,7 +3208,7 @@ function createEffect(canvas, C) {
       float cx = (float(i) + 0.5) * colW;
       float bh = uHeights[i] * (1.0 + uBreathe * sin(uTime * 1.3 + float(i) * 1.7));
       float d = abs(a - cx);
-      if (uShape > 3.5) d = min(d, 1.0 - d);
+      if (uShape < 0.5 || uShape > 3.5) d = min(d, 1.0 - d);
       float cover = smoothstep(hw + soft, max(hw - soft, 0.0), d);
       H = max(H, bh * cover);
     }
@@ -3229,29 +3229,34 @@ function createEffect(canvas, C) {
       } else { y = 1e3; }              // past the horizon: only the stage remains
     }
     // shape projection: which bar am I under (a), and how far along it (tc)?
-    // 0 floor, 1 ceiling, 2 mirror, 3 sides, 4 ring
+    // 0 diamond, 1 ceiling, 2 mirror, 3 angle, 4 blob
     float a, tc;
-    if (uShape < 0.5)      { a = x; tc = y; }
+    if (uShape < 0.5) {
+      vec2 pc = vec2(x - 0.5, y - 0.5) * 2.0;
+      a = fract(atan(pc.y, pc.x) * 0.15915494 + 0.25);
+      tc = (abs(pc.x) + abs(pc.y)) * 0.6;             // L1 metric: diamond contours
+    }
     else if (uShape < 1.5) { a = x; tc = 1.0 - y; }
     else if (uShape < 2.5) { a = x; tc = abs(y - 0.5) * 2.0; }
-    else if (uShape < 3.5) { a = y; tc = x; }
+    else if (uShape < 3.5) { a = clamp((x + y) * 0.5, 0.0, 1.0); tc = abs(y - x) * 0.7071; }  // bars rooted on the diagonal
     else {
       vec2 pc = vec2(x - 0.5, y - 0.5) * 2.0;
       a = fract(atan(pc.y, pc.x) * 0.15915494 + 0.25);
-      tc = length(pc) * 0.72;
+      float wob = 1.0 + 0.28 * sin(a * 12.566371 + 1.3) + 0.18 * sin(a * 18.849556 - 0.7);
+      tc = length(pc) * 0.72 * wob;                   // wobbling metric: organic blob contours
     }
     float H = silhouette(a) * uRise;
     // cursor draws the nearest bars toward it and brightens them; the cursor
     // coordinate follows the same shape projection as the bars
     float ca;
-    if (uShape < 2.5) ca = uM.x;
-    else if (uShape < 3.5) ca = uM.y;
-    else {
+    if (uShape < 0.5 || uShape > 3.5) {
       vec2 mc = (uM - 0.5) * 2.0;
       ca = fract(atan(mc.y, mc.x) * 0.15915494 + 0.25);
     }
+    else if (uShape < 2.5) ca = uM.x;
+    else ca = clamp((uM.x + uM.y) * 0.5, 0.0, 1.0);
     float ad = a - ca;
-    if (uShape > 3.5) ad -= floor(ad + 0.5);
+    if (uShape < 0.5 || uShape > 3.5) ad -= floor(ad + 0.5);
     float cd = ad / max(uCursorRadius, 0.01);
     float cbump = exp(-cd * cd) * uEngage;
     H += uCursorLift * cbump;
@@ -4409,7 +4414,7 @@ const EFFECTS = {
         ['height jitter', 'jitter', 0, 0.6, 0.01],
       ]],
       ['Shape', [
-        ['shape', 'shapeMode', 'seg', ['floor', 'ceiling', 'mirror', 'sides', 'ring']],
+        ['shape', 'shapeMode', 'seg', ['diamond', 'ceiling', 'mirror', 'angle', 'blob']],
         ['preset', 'shapePreset', 'seg', ['classic', 'peaked', '3d fold', 'dodge']],
         ['peak height', 'peak', 0.3, 1, 0.01],
         ['edge height', 'valley', 0, 1, 0.01],
