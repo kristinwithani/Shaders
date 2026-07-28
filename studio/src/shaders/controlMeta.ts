@@ -319,7 +319,7 @@ const PER: Record<ShaderId, Record<string, string>> = {
     cursorGlow: 'brightening near the cursor',
   },
   crest: {
-    shapeMode: 'the field geometry: diamond, ceiling, mirror, angle, or blob',
+    shapeMode: 'the field geometry: waves, arch, mirror, gate, or spiral',
     bars: 'number of bars in the field',
     spread: 'width of each bar',
     jitter: 'random variation in bar height',

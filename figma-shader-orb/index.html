@@ -3208,7 +3208,7 @@ function createEffect(canvas, C) {
       float cx = (float(i) + 0.5) * colW;
       float bh = uHeights[i] * (1.0 + uBreathe * sin(uTime * 1.3 + float(i) * 1.7));
       float d = abs(a - cx);
-      if (uShape < 0.5 || uShape > 3.5) d = min(d, 1.0 - d);
+      if (uShape > 3.5) d = min(d, 1.0 - d);
       float cover = smoothstep(hw + soft, max(hw - soft, 0.0), d);
       H = max(H, bh * cover);
     }
@@ -3229,34 +3229,42 @@ function createEffect(canvas, C) {
       } else { y = 1e3; }              // past the horizon: only the stage remains
     }
     // shape projection: which bar am I under (a), and how far along it (tc)?
-    // 0 diamond, 1 ceiling, 2 mirror, 3 angle, 4 blob
+    // 0 waves, 1 arch, 2 mirror, 3 gate, 4 spiral
     float a, tc;
-    if (uShape < 0.5) {
-      vec2 pc = vec2(x - 0.5, y - 0.5) * 2.0;
-      a = fract(atan(pc.y, pc.x) * 0.15915494 + 0.25);
-      tc = (abs(pc.x) + abs(pc.y)) * 0.6;             // L1 metric: diamond contours
+    if (uShape < 0.5) {                       // waves: the root line undulates
+      a = x;
+      tc = max(y - 0.1 * sin(x * 12.566371) - 0.06 * sin(x * 5.0 + 1.7), 0.0);
     }
-    else if (uShape < 1.5) { a = x; tc = 1.0 - y; }
-    else if (uShape < 2.5) { a = x; tc = abs(y - 0.5) * 2.0; }
-    else if (uShape < 3.5) { a = clamp((x + y) * 0.5, 0.0, 1.0); tc = abs(y - x) * 0.7071; }  // bars rooted on the diagonal
-    else {
+    else if (uShape < 1.5) {                  // arch: a fan of bars over the top half arc
+      float ang = atan(max(y, 1e-4), (x - 0.5) * 2.0);
+      a = ang * 0.31830989;                   // 0 at the right springer, 1 at the left
+      tc = length(vec2((x - 0.5) * 2.0, y)) * 0.8;
+    }
+    else if (uShape < 2.5) { a = x; tc = abs(y - 0.5) * 2.0; }        // mirror
+    else if (uShape < 3.5) { a = y; tc = min(x, 1.0 - x) * 2.0; }     // gate: curtains close from both sides
+    else {                                    // spiral: bars twist as they leave the core
       vec2 pc = vec2(x - 0.5, y - 0.5) * 2.0;
-      a = fract(atan(pc.y, pc.x) * 0.15915494 + 0.25);
-      float wob = 1.0 + 0.28 * sin(a * 12.566371 + 1.3) + 0.18 * sin(a * 18.849556 - 0.7);
-      tc = length(pc) * 0.72 * wob;                   // wobbling metric: organic blob contours
+      float r2 = dot(pc, pc);
+      float ang = r2 > 1e-8 ? atan(pc.y, pc.x) * 0.15915494 : 0.0;
+      a = fract(ang + 0.25 + sqrt(r2) * 0.55);
+      tc = sqrt(r2) * 0.72;
     }
     float H = silhouette(a) * uRise;
     // cursor draws the nearest bars toward it and brightens them; the cursor
     // coordinate follows the same shape projection as the bars
     float ca;
-    if (uShape < 0.5 || uShape > 3.5) {
+    if (uShape < 1.5 && uShape >= 0.5) ca = 1.0 - uM.x;   // arch runs right -> left
+    else if (uShape < 2.5) ca = uM.x;                      // waves + mirror follow x
+    else if (uShape < 3.5) ca = uM.y;                      // gate follows y
+    else {
+      // spiral: same twist as the bars, guarded — atan(0,0) is undefined and
+      // the eased cursor rests at the exact centre until it first moves
       vec2 mc = (uM - 0.5) * 2.0;
-      ca = fract(atan(mc.y, mc.x) * 0.15915494 + 0.25);
+      float md2 = dot(mc, mc);
+      ca = md2 > 1e-6 ? fract(atan(mc.y, mc.x) * 0.15915494 + 0.25 + sqrt(md2) * 0.55) : 0.25;
     }
-    else if (uShape < 2.5) ca = uM.x;
-    else ca = clamp((uM.x + uM.y) * 0.5, 0.0, 1.0);
     float ad = a - ca;
-    if (uShape < 0.5 || uShape > 3.5) ad -= floor(ad + 0.5);
+    if (uShape > 3.5) ad -= floor(ad + 0.5);
     float cd = ad / max(uCursorRadius, 0.01);
     float cbump = exp(-cd * cd) * uEngage;
     H += uCursorLift * cbump;
@@ -4414,7 +4422,7 @@ const EFFECTS = {
         ['height jitter', 'jitter', 0, 0.6, 0.01],
       ]],
       ['Shape', [
-        ['shape', 'shapeMode', 'seg', ['diamond', 'ceiling', 'mirror', 'angle', 'blob']],
+        ['shape', 'shapeMode', 'seg', ['waves', 'arch', 'mirror', 'gate', 'spiral']],
         ['preset', 'shapePreset', 'seg', ['classic', 'peaked', '3d fold', 'dodge']],
         ['peak height', 'peak', 0.3, 1, 0.01],
         ['edge height', 'valley', 0, 1, 0.01],

@@ -966,7 +966,7 @@ export const EFFECTS = {
         ['height jitter', 'jitter', 0, 0.6, 0.01],
       ]],
       ['Shape', [
-        ['shape', 'shapeMode', 'seg', ['diamond', 'ceiling', 'mirror', 'angle', 'blob']],
+        ['shape', 'shapeMode', 'seg', ['waves', 'arch', 'mirror', 'gate', 'spiral']],
         ['preset', 'shapePreset', 'seg', ['classic', 'peaked', '3d fold', 'dodge']],
         ['peak height', 'peak', 0.3, 1, 0.01],
         ['edge height', 'valley', 0, 1, 0.01],
