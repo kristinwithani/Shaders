@@ -48,6 +48,7 @@ export const TINTS: Record<ShaderId, Record<string, string>> = {
   },
 
   iris: {},
+  crest: {},
 };
 
 export function tintFor(id: ShaderId, key: string, C: Config): string | null {
@@ -315,6 +316,31 @@ const PER: Record<ShaderId, Record<string, string>> = {
     riseOn: 'bloom outward from the core on load',
     riseTime: 'how long the bloom takes',
     cursorLift: 'how far rays extend toward the cursor',
+    cursorGlow: 'brightening near the cursor',
+  },
+  crest: {
+    shapeMode: 'which way the bars grow: floor, ceiling, mirror, sides, or ring',
+    bars: 'number of bars in the field',
+    spread: 'width of each bar',
+    jitter: 'random variation in bar height',
+    peak: 'tallest bar reach',
+    valley: 'shortest bar reach',
+    curve: 'how height falls off across the field',
+    fold: 'tilts the field away in perspective',
+    foldDepth: 'camera distance for the fold',
+    bg: 'stage colour behind the field',
+    blendMode: 'how field colour meets the stage',
+    brightness: 'overall glow strength',
+    stopCount: 'how many colours build the shared rainbow',
+    melt: 'how much neighbouring bars blur together',
+    feather: 'softness of the crest edge',
+    halo: 'glow reaching past the crest',
+    colorSoft: 'how smoothly rainbow stops blend',
+    breathe: 'slow height pulse',
+    shimmer: 'fine ripple along the crest',
+    riseOn: 'reveal the field once on load',
+    riseTime: 'how long the reveal takes',
+    cursorLift: 'how far bars extend toward the cursor',
     cursorGlow: 'brightening near the cursor',
   },
 };
